@@ -63,7 +63,8 @@ namespace FSO.SimAntics
 
         private VMMotiveChange[] MotiveChanges = new VMMotiveChange[16];
         private VMIMotiveDecay MotiveDecay;
-        private short[] PersonData = new short[101];
+        private const int PersonDataLength = 101;
+        private short[] PersonData = new short[PersonDataLength];
         private short[] MotiveData = new short[16];
         private float _RadianDirection;
 
@@ -959,7 +960,10 @@ namespace FSO.SimAntics
             var lastGender = GetPersonData(VMPersonDataVariable.Gender);
             var lastPersonType = GetPersonData(VMPersonDataVariable.PersonType);
             var sched = GetPersonData(VMPersonDataVariable.VisitorSchedule);
-            if (neigh.PersonData != null) PersonData = neigh.PersonData.ToArray();
+            // neighbour records only store the first 88 entries (NBRS), so copy them over our own array
+            // rather than replacing it: entries 88+ (rehire tickers, random skin, friend counts...)
+            // would otherwise be out of range for every Sim loaded from the neighbourhood.
+            if (neigh.PersonData != null) Array.Copy(neigh.PersonData, PersonData, Math.Min(neigh.PersonData.Length, PersonData.Length));
             SetPersonData(VMPersonDataVariable.Gender, lastGender); //fixes cats switching to children suddenly
             SetPersonData(VMPersonDataVariable.NeighborId, neigh.NeighbourID);
             if (lastPersonType == 0) SetPersonData(VMPersonDataVariable.PersonType, (short)((GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == current?.ChunkID) ? 0 : 1));
@@ -1126,6 +1130,9 @@ namespace FSO.SimAntics
 
         public override VMEntity GetSlot(int slot)
         {
+            // scripts (e.g. Makin' Magic's attraction checks) ask for slots a Sim doesn't have;
+            // treat those as empty, as VMGameObject does
+            if (slot < 0 || slot >= Contained.Length) return null;
             return Contained[slot];
         }
 
@@ -1235,6 +1242,8 @@ namespace FSO.SimAntics
             MotiveChanges = input.MotiveChanges;
             MotiveDecay = input.MotiveDecay;
             PersonData = input.PersonData;
+            // lots saved while the above bug was present store short arrays; pad them back out
+            if (PersonData.Length < PersonDataLength) Array.Resize(ref PersonData, PersonDataLength);
             MotiveData = input.MotiveData;
             RadianDirection = input.RadianDirection;
             KillTimeout = input.KillTimeout;

@@ -69,6 +69,9 @@ namespace FSO.SimAntics.Utils
             return list.FirstOrDefault((other) => other.IsMaster && other.MasterID == tile.MasterID);
         }
 
+        // objects whose saved threads can't be resumed (see ConvertThread)
+        private HashSet<short> ResetAfterLoad = new HashSet<short>();
+
         private VMRoutine GetRoutine(VMStackFrameMarshal frame)
         {
             var content = Content.Content.Get();
@@ -319,6 +322,16 @@ namespace FSO.SimAntics.Utils
                 thread.Queue = new VMQueuedActionMarshal[0];
                 thread.Interrupt = false;
                 thread.ActionUID = 0;
+            }
+
+            // Premade houses were saved with older versions of some objects (e.g. Paintings.iff, Sofas.iff),
+            // whose saved frames run local routines that no longer exist in the installed object files (likely changed by later expansion packs).
+            // Resuming them would run a frame with no code. Start these objects fresh instead, as the
+            // original game does: an empty stack here, then a reset once the VM has loaded.
+            if (thread.Stack.Any(frame => GetRoutine(frame) == null))
+            {
+                ResetAfterLoad.Add(myID);
+                thread.Stack = new VMStackFrameMarshal[0];
             }
 
             return thread;
@@ -668,6 +681,11 @@ namespace FSO.SimAntics.Utils
 
             VM.Load(fsov);
             VM.UpdateFreeObjectID();
+
+            foreach (var id in ResetAfterLoad)
+            {
+                VM.GetObjectById(id)?.Reset(VM.Context);
+            }
 
             // Spawn controller objects that are missing from the saved lot.
             // In vanilla TS1, these are spawned automatically and saved into OBJM.
