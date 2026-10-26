@@ -72,6 +72,12 @@ namespace FSO.SimAntics.Utils
         // objects whose saved threads can't be resumed (see ConvertThread)
         private HashSet<short> ResetAfterLoad = new HashSet<short>();
 
+        private bool CanResume(VMStackFrameMarshal frame)
+        {
+            var routine = GetRoutine(frame);
+            return routine != null && frame.InstructionPointer < routine.Instructions.Length;
+        }
+
         private VMRoutine GetRoutine(VMStackFrameMarshal frame)
         {
             var content = Content.Content.Get();
@@ -325,10 +331,12 @@ namespace FSO.SimAntics.Utils
             }
 
             // Premade houses were saved with older versions of some objects (e.g. Paintings.iff, Sofas.iff),
-            // whose saved frames run local routines that no longer exist in the installed object files (likely changed by later expansion packs).
-            // Resuming them would run a frame with no code. Start these objects fresh instead, as the
-            // original game does: an empty stack here, then a reset once the VM has loaded.
-            if (thread.Stack.Any(frame => GetRoutine(frame) == null))
+            // whose saved frames run local routines that no longer exist in the installed object files, or
+            // sit past the end of a routine that has since shrunk (e.g. the Tiled Counter's 2-node main,
+            // saved at node 3) - likely changed by later expansion packs. Resuming them would run missing
+            // code. Start these objects fresh instead, as the original game does: an empty stack here,
+            // then a reset once the VM has loaded.
+            if (thread.Stack.Any(frame => !CanResume(frame)))
             {
                 ResetAfterLoad.Add(myID);
                 thread.Stack = new VMStackFrameMarshal[0];
