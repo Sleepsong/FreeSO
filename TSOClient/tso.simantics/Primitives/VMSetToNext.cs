@@ -27,6 +27,9 @@ namespace FSO.SimAntics.Primitives
             var entities = context.VM.Entities;
 
             VMEntity Pointer = context.VM.GetObjectById(targetValue);
+            // a family member search needs the family of the Sim we're continuing from; like the tile
+            // search below, there is nothing to find if that Sim is gone (e.g. has left the lot).
+            if (operand.SearchType == VMSetToNextSearchType.FamilyMember && !(Pointer is VMAvatar)) return VMPrimitiveExitCode.GOTO_FALSE;
 
             //re-evaluation of what this actually does:
             //tries to find the next object id (from the previous) that meets a specific condition.
