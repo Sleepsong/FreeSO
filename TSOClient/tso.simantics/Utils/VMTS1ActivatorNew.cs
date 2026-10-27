@@ -22,6 +22,12 @@ namespace FSO.SimAntics.Utils
         private const int OpcodeGotoSlot = 45;
         private const int OpcodeGosub = 30;
         private const int OpcodeIdleForInput = 17;
+        //primitives that run another tree as a child frame (besides subroutine calls)
+        private static HashSet<int> TreeRunningPrimitives = new HashSet<int>
+        {
+            OpcodeIdleForInput, 20 /*run functional tree*/, 22 /*look towards*/, OpcodeGotoRelative,
+            28 /*run tree by name*/, OpcodeGosub, OpcodeGotoSlot
+        };
 
         private class TS1MultitileBuilder
         {
@@ -76,6 +82,21 @@ namespace FSO.SimAntics.Utils
         {
             var routine = GetRoutine(frame);
             return routine != null && frame.InstructionPointer < routine.Instructions.Length;
+        }
+
+        /// <summary>
+        /// Checks that each saved frame is waiting on the frame above it: its node calls that routine, or is a primitive
+        /// that runs another tree (interactions, routing portals, named trees). A frame saved with a different version of
+        /// its routine can point at an unrelated node, where the parent would carry on when its child returns.
+        /// </summary>
+        private bool FramesMatch(VMStackFrameMarshal[] stack)
+        {
+            for (int i = 0; i < stack.Length - 1; i++)
+            {
+                var opcode = GetRoutine(stack[i]).Instructions[stack[i].InstructionPointer].Opcode;
+                if (opcode != stack[i + 1].RoutineID && !TreeRunningPrimitives.Contains(opcode)) return false;
+            }
+            return true;
         }
 
         private VMRoutine GetRoutine(VMStackFrameMarshal frame)
@@ -336,7 +357,11 @@ namespace FSO.SimAntics.Utils
             // saved at node 3) - likely changed by later expansion packs. Resuming them would run missing
             // code. Start these objects fresh instead, as the original game does: an empty stack here,
             // then a reset once the VM has loaded.
-            if (thread.Stack.Any(frame => !CanResume(frame)))
+            // The same goes for frames whose node no longer calls the routine above them: the Newbies were saved
+            // in "person main loop" node 18 calling "check next motive", which the installed PersonGlobals calls
+            // from node 14. On return, node 18 led into the branch that marks a Sim as a visitor, and Bob and
+            // Betty left their own lot for good.
+            if (thread.Stack.Any(frame => !CanResume(frame)) || !FramesMatch(thread.Stack))
             {
                 ResetAfterLoad.Add(myID);
                 thread.Stack = new VMStackFrameMarshal[0];
