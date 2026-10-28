@@ -13,7 +13,7 @@ namespace FSO.Files.Formats.IFF.Chunks
         public short CameraDir;
         public short UnknownOne2;
         public short UnknownFlag2;
-        public uint GUID;
+        public float RoofPitch; //0 flat, 0.4 shallow, 0.6 medium, 1 steep
         public string RoofName;
 
         public override void Read(IffFile iff, Stream stream)
@@ -30,7 +30,7 @@ namespace FSO.Files.Formats.IFF.Chunks
                 CameraDir = io.ReadInt16();
                 UnknownOne2 = io.ReadInt16();
                 UnknownFlag2 = io.ReadInt16();
-                GUID = io.ReadUInt32();
+                RoofPitch = io.ReadFloat();
                 RoofName = io.ReadNullTerminatedString();
             }
         }

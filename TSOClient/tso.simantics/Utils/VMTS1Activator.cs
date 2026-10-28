@@ -149,6 +149,7 @@ namespace FSO.SimAntics.Utils
             arch.Terrain.Heights = Array.ConvertAll(ResizeGrass(DecodeHeights(iff.Get<ARRY>(0).TransposeData), size), x=>(short)(x*10));
             arch.Terrain.RegenerateCenters();
             arch.RoofStyle = (uint)Content.Content.Get().WorldRoofs.NameToID(hous.RoofName.ToLowerInvariant()+".bmp");
+            arch.RoofPitch = hous.RoofPitch;
 
             if (VM.UseWorld)
             {
