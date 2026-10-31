@@ -40,13 +40,7 @@ namespace FSO.SimAntics.Engine
                     Counts[signature] = ++count;
 
                     var output = new StringBuilder();
-                    if (!SessionStarted)
-                    {
-                        SessionStarted = true;
-                        Rotate(path);
-                        output.AppendLine();
-                        output.AppendLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} {SessionHeader} =====");
-                    }
+                    StartSession(output, path);
 
                     if (count <= FullReportsPerSignature)
                     {
@@ -64,6 +58,47 @@ namespace FSO.SimAntics.Engine
             {
                 //logging must never take the game down.
             }
+        }
+
+        private const int MaxNotesPerSession = 200;
+        private static int NotesWritten;
+
+        /// <summary>
+        /// Records a problem the VM recovered from without an exception (e.g. state that couldn't be loaded).
+        /// Identical notes are written once per session.
+        /// </summary>
+        public static void WriteNote(VMEntity entity, string message)
+        {
+            var path = Path;
+            if (path == null) return;
+            try
+            {
+                lock (Lock)
+                {
+                    var line = Safe(() => entity?.ToString()) + " " + message;
+                    if (NotesWritten >= MaxNotesPerSession || Counts.ContainsKey("note:" + line)) return;
+                    Counts["note:" + line] = 1;
+                    NotesWritten++;
+
+                    var output = new StringBuilder();
+                    StartSession(output, path);
+                    output.AppendLine($"[{DateTime.Now:HH:mm:ss}] note: {line}");
+                    File.AppendAllText(path, output.ToString());
+                }
+            }
+            catch
+            {
+                //logging must never take the game down.
+            }
+        }
+
+        private static void StartSession(StringBuilder output, string path)
+        {
+            if (SessionStarted) return;
+            SessionStarted = true;
+            Rotate(path);
+            output.AppendLine();
+            output.AppendLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} {SessionHeader} =====");
         }
 
         private static void Rotate(string path)
