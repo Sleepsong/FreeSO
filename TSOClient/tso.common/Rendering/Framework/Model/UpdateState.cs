@@ -57,6 +57,16 @@ namespace FSO.Common.Rendering.Framework.Model
         /// </summary>
         public InputDevice LastInputDevice = InputDevice.Mouse;
 
+        /// <summary>
+        /// Set to true during Update by any element that handles the pad natively this frame. While it is set,
+        /// the virtual cursor stands down on the following frame so pad presses aren't also delivered as mouse clicks.
+        /// Reset at the start of every frame.
+        /// </summary>
+        public bool PadCaptured;
+
+        /// <summary>Whether PadCaptured was set during the previous frame (i.e. the virtual cursor is standing down now).</summary>
+        public bool PadWasCaptured;
+
         public KeyboardState PreviousKeyboardState;
         public List<char> FrameTextInput;
 

@@ -393,6 +393,19 @@ namespace FSO.Client.UI
         }
 
         private List<DialogReference> Dialogs = new List<DialogReference>();
+
+        /// <summary>True while any modal dialog is shown. Screens use it to hand gamepad input to the dialog.</summary>
+        public bool HasModalDialog
+        {
+            get
+            {
+                foreach (var dialog in Dialogs)
+                {
+                    if (dialog.Modal) return true;
+                }
+                return false;
+            }
+        }
         public void AddDialog(DialogReference dialog)
         {
             //dialogContainer.Add(dialog.Dialog);

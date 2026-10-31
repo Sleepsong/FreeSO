@@ -29,6 +29,7 @@ namespace FSO.Common.Rendering.Framework
 
         public VirtualCursor VirtualCursor = new VirtualCursor();
         private PointerDeviceTracker PointerDevice = new PointerDeviceTracker();
+        private bool WasCapturedBeforeCursor;
 
         public GameScreen(GraphicsDevice device)
         {
@@ -61,6 +62,8 @@ namespace FSO.Common.Rendering.Framework
 
             var touchMode = FSOEnvironment.SoftwareKeyboard;
             State.Pad.Update(time, hasFocus);
+            State.PadWasCaptured = State.PadCaptured;
+            State.PadCaptured = false;
 
             if (touchMode)
             {
@@ -163,12 +166,22 @@ namespace FSO.Common.Rendering.Framework
             var width = Device.PresentationParameters.BackBufferWidth;
             var height = Device.PresentationParameters.BackBufferHeight;
 
-            if (State.LastInputDevice == InputDevice.GamePad && GamePadSettings.VirtualCursor)
+            var captured = State.PadWasCaptured;
+            if (State.LastInputDevice == InputDevice.GamePad && GamePadSettings.VirtualCursor && !captured)
             {
-                //start from wherever the mouse was, so picking up the pad doesn't make the cursor jump.
-                if (previous != InputDevice.GamePad) VirtualCursor.MoveTo(real.Position, width, height);
+                if (previous != InputDevice.GamePad)
+                {
+                    //start from wherever the mouse was, so picking up the pad doesn't make the cursor jump.
+                    VirtualCursor.MoveTo(real.Position, width, height);
+                }
+                else if (WasCapturedBeforeCursor)
+                {
+                    //a screen just handed the pad back (e.g. a dialog opened over the lot): dialogs appear centred.
+                    VirtualCursor.MoveTo(new Point(width / 2, height / 2), width, height);
+                }
                 VirtualCursor.Apply(State, time, width, height);
             }
+            WasCapturedBeforeCursor = captured;
 
             if (VirtualCursor.WheelOffset != 0)
             {

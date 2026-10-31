@@ -127,6 +127,7 @@ namespace FSO.Client
             { "GamePadDeadZone", "0.2" },
             { "GamePadCursorSpeed", "1" },
             { "GamePadSwapConfirmCancel", "false" }, //confirm on B, cancel on A
+            { "UILayout", "auto" }, //Simitone lot UI: desktop, mobile, or auto (mobile for touch, or when the pad was in use as the lot loaded)
         };
 
         public override Dictionary<string, string> DefaultValues
@@ -210,6 +211,7 @@ namespace FSO.Client
         public float GamePadDeadZone { get; set; }
         public float GamePadCursorSpeed { get; set; }
         public bool GamePadSwapConfirmCancel { get; set; }
+        public string UILayout { get; set; }
 
         public static int TARGET_COMPAT_STATE = 2;
     }
