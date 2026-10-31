@@ -210,42 +210,8 @@ namespace FSO.SimAntics.Utils
             };
         }
 
-        private HashSet<uint> CheckedTreeVersions = new HashSet<uint>();
-
-        /// <summary>
-        /// Diagnostics: house files record each object type's main and init tree versions as of the save. Log the
-        /// types whose installed trees report different versions, since saved stacks of those objects may not match
-        /// the installed code. (That these fields are comparable to BHAV.Version is unconfirmed; this gathers data.)
-        /// </summary>
-        private void NoteTreeVersions(OBJMInstance inst)
-        {
-            var objd = inst.OBJD;
-            var type = inst.OBJT;
-            if (objd == null || type == null || type.GUID == 0 || !CheckedTreeVersions.Add(type.GUID)) return;
-            var obj = Content.Content.Get().WorldObjects.Get(type.GUID);
-            if (obj == null) return;
-
-            var main = TreeVersion(obj, objd.BHAV_MainID);
-            var init = TreeVersion(obj, objd.BHAV_Init);
-            if (main == type.MainTreeVersion && init == type.InitTreeVersion) return;
-            Engine.VMExceptionLog.WriteNote(type.Name, "(type 0x" + type.GUID.ToString("X8") + ") was saved with main tree version "
-                + type.MainTreeVersion + " and init tree version " + type.InitTreeVersion + "; installed: main "
-                + (main?.ToString() ?? "none") + ", init " + (init?.ToString() ?? "none") + ".");
-        }
-
-        private int? TreeVersion(FSO.Content.GameObject obj, ushort id)
-        {
-            if (id == 0) return null;
-            BHAV bhav;
-            if (id >= 8192) bhav = obj.Resource.SemiGlobal?.Get<BHAV>(id);
-            else if (id >= 4096) bhav = obj.Resource.Get<BHAV>(id);
-            else bhav = VM.Context.Globals.Resource.Get<BHAV>(id);
-            return bhav?.Version;
-        }
-
         private VMThreadMarshal ConvertThread(OBJM objm, OBJT objt, OBJMInstance inst)
         {
-            NoteTreeVersions(inst);
             var thread = new VMThreadMarshal();
             short myID = inst.ObjectData[(int)VMStackObjectVariable.ObjectId];
 

@@ -301,6 +301,7 @@ namespace FSO.Client.UI
             state.InputManager = inputManager;
             Content.Content.Get()?.Changes.RunResModifications();
             mainUI.Update(state);
+            UpdateDialogNavigation(state);
 
             if (state.AltDown && state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.Enter))
             {
@@ -334,9 +335,47 @@ namespace FSO.Client.UI
             mainUI.PreDraw(SBatch);
         }
 
+        /// <summary>
+        /// With a pad connected, the top-most modal dialog is navigated natively and the pad is captured, so the
+        /// virtual cursor stands down. Dialogs with nothing focusable are left to the virtual cursor.
+        /// </summary>
+        private void UpdateDialogNavigation(UpdateState state)
+        {
+            DialogReference top = null;
+            for (int i = Dialogs.Count - 1; i >= 0; i--)
+            {
+                if (Dialogs[i].Modal)
+                {
+                    top = Dialogs[i];
+                    break;
+                }
+            }
+
+            if (top != null && state.Pad.Connected)
+            {
+                if (DialogNavigator.Scope != top.Dialog) DialogEmptyFrames = 0;
+                if (DialogNavigator.Update(state, top.Dialog))
+                {
+                    DialogEmptyFrames = 0;
+                    state.PadCaptured = true;
+                }
+                else if (++DialogEmptyFrames < DialogOpeningFrames)
+                {
+                    //buttons often appear only after a dialog's opening animation; don't let the virtual cursor
+                    //(and a stray click) in during it.
+                    state.PadCaptured = true;
+                }
+            }
+            else
+            {
+                DialogNavigator.Clear();
+            }
+        }
+
         public void Draw(UISpriteBatch SBatch)
         {
             mainUI.Draw(SBatch);
+            DialogNavigator.Draw(SBatch);
 
             if (TooltipProperties.UpdateDead) TooltipProperties.Show = false;
             if (Tooltip != null && TooltipProperties.Show) DrawTooltip(SBatch, TooltipProperties.Position, TooltipProperties.Opacity, TooltipProperties.Color);
@@ -393,6 +432,11 @@ namespace FSO.Client.UI
         }
 
         private List<DialogReference> Dialogs = new List<DialogReference>();
+
+        /// <summary>Gamepad navigation for the top-most modal dialog. See <see cref="UIFocusNavigator"/>.</summary>
+        public UIFocusNavigator DialogNavigator = new UIFocusNavigator();
+        private int DialogEmptyFrames;
+        private const int DialogOpeningFrames = 60; //after this long with nothing focusable, the dialog gets the virtual cursor
 
         /// <summary>True while any modal dialog is shown. Screens use it to hand gamepad input to the dialog.</summary>
         public bool HasModalDialog
