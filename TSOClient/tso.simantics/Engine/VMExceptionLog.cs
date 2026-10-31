@@ -67,7 +67,7 @@ namespace FSO.SimAntics.Engine
         /// Records a problem the VM recovered from without an exception (e.g. state that couldn't be loaded).
         /// Identical notes are written once per session.
         /// </summary>
-        public static void WriteNote(VMEntity entity, string message)
+        public static void WriteNote(string subject, string message)
         {
             var path = Path;
             if (path == null) return;
@@ -75,7 +75,7 @@ namespace FSO.SimAntics.Engine
             {
                 lock (Lock)
                 {
-                    var line = Safe(() => entity?.ToString()) + " " + message;
+                    var line = (subject ?? "?") + " " + message;
                     if (NotesWritten >= MaxNotesPerSession || Counts.ContainsKey("note:" + line)) return;
                     Counts["note:" + line] = 1;
                     NotesWritten++;

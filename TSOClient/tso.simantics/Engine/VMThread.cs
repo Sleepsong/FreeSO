@@ -1184,15 +1184,22 @@ namespace FSO.SimAntics.Engine
                     Stack.Add(new VMStackFrame(item, context, this));
                 }
             }
-            //a saved frame whose routine isn't in the installed content can't be resumed: the thread would crash the
-            //first time it returned to it. Restart the entity on its first tick instead (what that crash's handler
-            //does anyway), and record which routine was missing.
-            var missing = Stack.FirstOrDefault(frame => frame.GetType() == typeof(VMStackFrame) && frame.Routine == null);
-            if (missing != null)
+            //a saved frame that doesn't match the installed content can't be resumed: its routine is missing, or the
+            //saved position is past the routine's end (the object's code changed since the save). The thread would
+            //crash the first time it returned to that frame. Restart the entity on its first tick instead (what that
+            //crash's handler does anyway), and record why.
+            var broken = Stack.FirstOrDefault(frame => frame.GetType() == typeof(VMStackFrame)
+                && (frame.Routine == null || frame.InstructionPointer >= frame.Routine.Instructions.Length));
+            if (broken != null)
             {
-                VMExceptionLog.WriteNote(Entity, "was saved inside routine 0x" + missing.MissingRoutineID.ToString("X4")
-                    + " (code owner 0x" + (missing.CodeOwner?.OBJ?.GUID.ToString("X8") ?? "?") + ", frame " + Stack.IndexOf(missing)
-                    + " of " + Stack.Count + "), which the installed content doesn't have; it will restart its script.");
+                var where = " (code owner 0x" + (broken.CodeOwner?.OBJ?.GUID.ToString("X8") ?? "?") + ", frame "
+                    + Stack.IndexOf(broken) + " of " + Stack.Count + ")";
+                var problem = (broken.Routine == null)
+                    ? "was saved inside routine 0x" + broken.MissingRoutineID.ToString("X4") + where + ", which the installed content doesn't have"
+                    : "was saved at instruction " + broken.InstructionPointer + " of routine '" + broken.Routine.Rti?.Name?.TrimEnd('\0')
+                        + "' 0x" + broken.Routine.ID.ToString("X4") + where + ", which has only " + broken.Routine.Instructions.Length
+                        + " instructions in the installed content";
+                VMExceptionLog.WriteNote(Entity?.Object?.OBJ?.ChunkLabel ?? ("object " + Entity?.ObjectID), problem + "; it will restart its script.");
                 Stack.Clear();
                 ResetAfterLoad = true;
             }
