@@ -369,6 +369,7 @@ namespace FSO.SimAntics.Engine
 #endif
 
                 if (e is ThreadAbortException) throw e;
+                VMExceptionLog.Write(e, this, Entity);
                 if (Stack.Count == 0) return;
                 var context = Stack[Stack.Count - 1];
                 bool Delete = ((Entity is VMGameObject) && (DialogCooldown > 30 * 20 - 10));
