@@ -959,7 +959,16 @@ namespace FSO.SimAntics
             var lastGender = GetPersonData(VMPersonDataVariable.Gender);
             var lastPersonType = GetPersonData(VMPersonDataVariable.PersonType);
             var sched = GetPersonData(VMPersonDataVariable.VisitorSchedule);
-            if (neigh.PersonData != null) PersonData = neigh.PersonData.ToArray();
+            if (neigh.PersonData != null)
+            {
+                //neighbourhood records hold fewer entries (88) than avatars use (101). Overlay them rather than
+                //replacing the array, so trees that read later entries (e.g. Makin' Magic's ghost social checks)
+                //see the avatar's existing values instead of indexing past the end.
+                var data = new short[Math.Max(PersonData.Length, neigh.PersonData.Length)];
+                Array.Copy(PersonData, data, PersonData.Length);
+                Array.Copy(neigh.PersonData, data, neigh.PersonData.Length);
+                PersonData = data;
+            }
             SetPersonData(VMPersonDataVariable.Gender, lastGender); //fixes cats switching to children suddenly
             SetPersonData(VMPersonDataVariable.NeighborId, neigh.NeighbourID);
             if (lastPersonType == 0) SetPersonData(VMPersonDataVariable.PersonType, (short)((GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == current?.ChunkID) ? 0 : 1));
