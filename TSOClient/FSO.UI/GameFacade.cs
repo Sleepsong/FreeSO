@@ -11,6 +11,8 @@ using System.Diagnostics;
 using Microsoft.Xna.Framework;
 using FSO.Common.Rendering.Emoji;
 using FSO.UI.Framework;
+using FSO.Common;
+using FSO.Common.Rendering.Framework.IO;
 
 namespace FSO.Client
 {
@@ -46,6 +48,24 @@ namespace FSO.Client
 
         public static void Init()
         {
+            ApplyGamePadSettings();
+        }
+
+        /// <summary>
+        /// Pushes the persisted gamepad options (config.ini, plus optional binding overrides in gamepad.ini in the
+        /// user directory) into the input loop. Call again after changing the settings.
+        /// </summary>
+        public static void ApplyGamePadSettings()
+        {
+            var settings = GlobalSettings.Default;
+            var problems = GamePadSettings.Configure(
+                settings.GamePadEnabled,
+                settings.GamePadDeadZone,
+                settings.GamePadVirtualCursor,
+                settings.GamePadCursorSpeed,
+                settings.GamePadSwapConfirmCancel,
+                Path.Combine(FSOEnvironment.UserDir, "gamepad.ini"));
+            if (problems != null) Console.WriteLine("Gamepad bindings: " + problems);
         }
 
         public static string GameFilePath(string relativePath)

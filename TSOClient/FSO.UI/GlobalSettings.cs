@@ -121,6 +121,12 @@ namespace FSO.Client
             { "ArchiveServerGUID", "" },
             { "ArchiveClientGUID", "" },
             { "TS1FreeWill", "true" },
+
+            { "GamePadEnabled", "true" },
+            { "GamePadVirtualCursor", "true" }, //left stick drives a stand-in mouse cursor on screens without native pad support
+            { "GamePadDeadZone", "0.2" },
+            { "GamePadCursorSpeed", "1" },
+            { "GamePadSwapConfirmCancel", "false" }, //confirm on B, cancel on A
         };
 
         public override Dictionary<string, string> DefaultValues
@@ -198,6 +204,12 @@ namespace FSO.Client
         public string ArchiveClientGUID { get; set; }
 
         public bool TS1FreeWill { get; set; }
+
+        public bool GamePadEnabled { get; set; }
+        public bool GamePadVirtualCursor { get; set; }
+        public float GamePadDeadZone { get; set; }
+        public float GamePadCursorSpeed { get; set; }
+        public bool GamePadSwapConfirmCancel { get; set; }
 
         public static int TARGET_COMPAT_STATE = 2;
     }

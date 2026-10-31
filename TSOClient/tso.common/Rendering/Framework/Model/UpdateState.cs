@@ -48,6 +48,15 @@ namespace FSO.Common.Rendering.Framework.Model
         public InputManager InputManager;
         public bool TouchMode;
 
+        /// <summary>Gamepad state for this frame. Always present; check Pad.Connected.</summary>
+        public GamePadInput Pad = new GamePadInput();
+
+        /// <summary>
+        /// The pointing device the player used most recently. While this is GamePad and the virtual cursor is
+        /// enabled, MouseState is synthesised from the pad.
+        /// </summary>
+        public InputDevice LastInputDevice = InputDevice.Mouse;
+
         public KeyboardState PreviousKeyboardState;
         public List<char> FrameTextInput;
 
