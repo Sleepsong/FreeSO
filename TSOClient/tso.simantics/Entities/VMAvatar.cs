@@ -63,7 +63,9 @@ namespace FSO.SimAntics
 
         private VMMotiveChange[] MotiveChanges = new VMMotiveChange[16];
         private VMIMotiveDecay MotiveDecay;
-        private short[] PersonData = new short[101];
+        /// <summary>Entries GetPersonData accepts (0-100). Every person data array is kept at least this long.</summary>
+        private const int PersonDataSize = 101;
+        private short[] PersonData = new short[PersonDataSize];
         private short[] MotiveData = new short[16];
         private float _RadianDirection;
 
@@ -792,6 +794,15 @@ namespace FSO.SimAntics
             return PersonData[(ushort)variable];
         }
 
+        private static short[] PadPersonData(short[] data)
+        {
+            if (data == null) return new short[PersonDataSize];
+            if (data.Length >= PersonDataSize) return data;
+            var padded = new short[PersonDataSize];
+            Array.Copy(data, padded, data.Length);
+            return padded;
+        }
+
         public short[] GetPersonDataClone()
         {
             return PersonData.ToArray();
@@ -968,7 +979,7 @@ namespace FSO.SimAntics
                 //neighbourhood records hold fewer entries (88) than avatars use (101). Overlay them rather than
                 //replacing the array, so trees that read later entries (e.g. Makin' Magic's ghost social checks)
                 //see the avatar's existing values instead of indexing past the end.
-                var data = new short[Math.Max(PersonData.Length, neigh.PersonData.Length)];
+                var data = new short[Math.Max(PersonDataSize, Math.Max(PersonData.Length, neigh.PersonData.Length))];
                 Array.Copy(PersonData, data, PersonData.Length);
                 Array.Copy(neigh.PersonData, data, neigh.PersonData.Length);
                 PersonData = data;
@@ -1255,7 +1266,8 @@ namespace FSO.SimAntics
 
             MotiveChanges = input.MotiveChanges;
             MotiveDecay = input.MotiveDecay;
-            PersonData = input.PersonData;
+            //houses saved by the original game carry 80 (pre-Superstar) or 256 entries.
+            PersonData = PadPersonData(input.PersonData);
             MotiveData = input.MotiveData;
             RadianDirection = input.RadianDirection;
             KillTimeout = input.KillTimeout;
