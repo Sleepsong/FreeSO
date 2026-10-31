@@ -1126,6 +1126,9 @@ namespace FSO.SimAntics
 
         public override VMEntity GetSlot(int slot)
         {
+            //out-of-range slots are empty, as for game objects. Some TS1 expansion trees (e.g. Makin' Magic's
+            //attraction check) read avatar slots past the three that avatars have.
+            if (slot < 0 || slot >= Contained.Length) return null;
             return Contained[slot];
         }
 
