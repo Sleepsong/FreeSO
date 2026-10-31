@@ -287,8 +287,16 @@ namespace FSO.SimAntics.Engine
             }
         }
 
+        private bool ResetAfterLoad;
+
         public void Tick(){
             if (VMTravelLog.Enabled) VMTravelLog.Running = this;
+            if (ResetAfterLoad)
+            {
+                ResetAfterLoad = false;
+                Entity.Reset(Context);
+                return;
+            }
 #if IDE_COMPAT
             if (ThreadBreak == VMThreadBreakMode.Pause) return;
             else if (ThreadBreak == VMThreadBreakMode.Reset)
@@ -1176,6 +1184,19 @@ namespace FSO.SimAntics.Engine
                     Stack.Add(new VMStackFrame(item, context, this));
                 }
             }
+            //a saved frame whose routine isn't in the installed content can't be resumed: the thread would crash the
+            //first time it returned to it. Restart the entity on its first tick instead (what that crash's handler
+            //does anyway), and record which routine was missing.
+            var missing = Stack.FirstOrDefault(frame => frame.GetType() == typeof(VMStackFrame) && frame.Routine == null);
+            if (missing != null)
+            {
+                VMExceptionLog.WriteNote(Entity, "was saved inside routine 0x" + missing.MissingRoutineID.ToString("X4")
+                    + " (code owner 0x" + (missing.CodeOwner?.OBJ?.GUID.ToString("X8") ?? "?") + ", frame " + Stack.IndexOf(missing)
+                    + " of " + Stack.Count + "), which the installed content doesn't have; it will restart its script.");
+                Stack.Clear();
+                ResetAfterLoad = true;
+            }
+
             Queue = new List<VMQueuedAction>();
             QueueDirty = true;
             foreach (var item in input.Queue) Queue.Add(new VMQueuedAction(item, context));
