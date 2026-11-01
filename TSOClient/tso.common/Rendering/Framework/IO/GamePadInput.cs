@@ -51,7 +51,7 @@ namespace FSO.Common.Rendering.Framework.IO
     }
 
     /// <summary>
-    /// Polls the first connected gamepad once per frame. Exposes dead-zoned analog values and
+    /// Polls the connected gamepad in use (see <see cref="ChoosePad"/>) once per frame. Exposes dead-zoned analog values and
     /// press/release/auto-repeat edges for each <see cref="PadAction"/>. Lives on UpdateState.Pad.
     /// </summary>
     public class GamePadInput
@@ -65,7 +65,7 @@ namespace FSO.Common.Rendering.Framework.IO
         private const float StickNavThreshold = 0.5f;
         private const double RepeatDelay = 0.4; //seconds a button is held before it starts repeating
         private const double RepeatInterval = 0.1;
-        private const double RescanInterval = 1.0; //seconds between looking for a newly connected pad
+        private const int MaxPads = 8; //pad slots looked at
 
         public bool Connected { get; private set; }
         public int PlayerIndex { get; private set; } = -1;
@@ -95,7 +95,7 @@ namespace FSO.Common.Rendering.Framework.IO
         private readonly bool[] WasDown = new bool[SlotCount];
         private readonly bool[] Repeat = new bool[SlotCount];
         private readonly double[] NextRepeat = new double[SlotCount];
-        private double NextScan;
+        private readonly GamePadState[] PadStates = new GamePadState[MaxPads];
 
         public bool IsDown(PadAction action) => Down[(int)action];
         public bool Pressed(PadAction action) => Down[(int)action] && !WasDown[(int)action];
@@ -220,32 +220,49 @@ namespace FSO.Common.Rendering.Framework.IO
             if (!GamePadSettings.Enabled)
             {
                 PlayerIndex = -1;
+                DisplayName = "";
                 return default(GamePadState);
             }
 
-            if (PlayerIndex != -1)
+            var count = Math.Min(MaxPads, GamePad.MaximumGamePadCount);
+            for (int i = 0; i < count; i++) PadStates[i] = GamePad.GetState(i, GamePadDeadZone.None, GamePadDeadZone.None);
+            var chosen = ChoosePad(PlayerIndex, PadStates, count);
+            if (chosen != PlayerIndex)
             {
-                var state = GamePad.GetState(PlayerIndex, GamePadDeadZone.None, GamePadDeadZone.None);
-                if (state.IsConnected) return state;
-                PlayerIndex = -1;
-                DisplayName = "";
-                NextScan = now;
+                PlayerIndex = chosen;
+                DisplayName = (chosen == -1) ? "" : (GamePad.GetCapabilities(chosen).DisplayName ?? "");
             }
+            return (chosen == -1) ? default(GamePadState) : PadStates[chosen];
+        }
 
-            if (now < NextScan) return default(GamePadState);
-            NextScan = now + RescanInterval;
-
-            for (int i = 0; i < GamePad.MaximumGamePadCount; i++)
+        /// <summary>
+        /// Which of the connected pads to read (an index into <paramref name="states"/>, or -1 for none): the current
+        /// one while it's being used; else another that's being used; else the current one; else the first connected.
+        /// Several pads can be connected for one controller (Steam can show a game more than one copy of a controller,
+        /// and only one of them carries its input), so whichever the player is actually pressing wins.
+        /// </summary>
+        public static int ChoosePad(int current, GamePadState[] states, int count)
+        {
+            bool Connected(int i) => i >= 0 && i < count && states[i].IsConnected;
+            if (Connected(current) && InUse(states[current])) return current;
+            for (int i = 0; i < count; i++)
             {
-                var caps = GamePad.GetCapabilities(i);
-                if (!caps.IsConnected) continue;
-                var state = GamePad.GetState(i, GamePadDeadZone.None, GamePadDeadZone.None);
-                if (!state.IsConnected) continue;
-                PlayerIndex = i;
-                DisplayName = caps.DisplayName ?? "";
-                return state;
+                if (i != current && Connected(i) && InUse(states[i])) return i;
             }
-            return default(GamePadState);
+            if (Connected(current)) return current;
+            for (int i = 0; i < count; i++)
+            {
+                if (Connected(i)) return i;
+            }
+            return -1;
+        }
+
+        /// <summary>The player is using this pad: a button down, or a stick or trigger pushed past halfway.</summary>
+        public static bool InUse(GamePadState state)
+        {
+            return IsAnyButtonDown(ref state)
+                || state.ThumbSticks.Left.Length() > 0.5f || state.ThumbSticks.Right.Length() > 0.5f
+                || state.Triggers.Left > 0.5f || state.Triggers.Right > 0.5f;
         }
 
         private static readonly Buttons[] PhysicalButtons =
