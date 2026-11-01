@@ -156,6 +156,12 @@ namespace FSO.SimAntics
         }
 
         //inferred properties
+        /// <summary>
+        /// TS1: whether this avatar should keep a direct control action queued. Runtime only, unlike TSO's
+        /// person data flag, so it never ends up in TS1 save data.
+        /// </summary>
+        public bool DirectControlEnabled;
+
         public string[] WalkAnimations = new string[50];
         public string[] SwimAnimations = new string[50];
         private STR BodyStrings;

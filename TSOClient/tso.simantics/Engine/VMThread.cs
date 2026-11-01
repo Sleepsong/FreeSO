@@ -1062,15 +1062,17 @@ namespace FSO.SimAntics.Engine
         public void EnsureDirectControlAction()
         {
             if (!(Entity is VMAvatar ava) ||
-                VM.GlobTS1 ||
-                ava.GetPersonData(VMPersonDataVariable.UnusedAndDoNotUse2) != 32767 ||
+                (VM.GlobTS1 ? !ava.DirectControlEnabled : ava.GetPersonData(VMPersonDataVariable.UnusedAndDoNotUse2) != 32767) ||
                 ava.GetPersonData(VMPersonDataVariable.Posture) != 0 ||
                 Queue.Any(entry => entry.Flags.HasFlag(TTABFlags.FSODirectControl)))
             {
                 return;
             }
 
-            var routine = Entity.GetRoutineWithOwner(9001, Context);
+            //TS1 content has no direct control routine, and its own 0x2329 (if any) is unrelated: always use the stand-in.
+            var routine = VM.GlobTS1
+                ? new VMBHAVOwnerPair(VMDirectControlFrame.TS1Routine, Entity.Object)
+                : Entity.GetRoutineWithOwner(9001, Context);
             if (routine == null || routine.routine == null) return;
 
             EnqueueAction(
@@ -1162,6 +1164,21 @@ namespace FSO.SimAntics.Engine
             QueueDirty = true;
             foreach (var item in input.Queue) Queue.Add(new VMQueuedAction(item, context));
             ActiveQueueBlock = input.ActiveQueueBlock;
+
+            //direct control actions saved by a TS1 frontend use a runtime-only routine (VMDirectControlFrame.TS1Routine)
+            //and can't be resumed. Drop them; the frontend re-enables direct control if the player is still using it.
+            //If one was running, its stack is unresumable too, so restart the avatar on its first tick.
+            var active = (ActiveQueueBlock >= 0 && ActiveQueueBlock < Queue.Count) ? Queue[ActiveQueueBlock] : null;
+            var removed = Queue.RemoveAll(action => action.ActionRoutine == null && action.Flags.HasFlag(TTABFlags.FSODirectControl));
+            if (removed > 0)
+            {
+                ActiveQueueBlock = (sbyte)((active == null) ? -1 : Queue.IndexOf(active));
+                if (active != null && ActiveQueueBlock == -1)
+                {
+                    Stack.Clear();
+                    ResetAfterLoad = true;
+                }
+            }
             TempRegisters = input.TempRegisters;
             TempXL = input.TempXL;
             LastStackExitCode = input.LastStackExitCode;
