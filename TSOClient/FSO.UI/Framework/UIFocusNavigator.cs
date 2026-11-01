@@ -61,6 +61,13 @@ namespace FSO.Client.UI.Framework
         public UIElement Scope { get; private set; }
         public UIElement Focused { get; private set; }
 
+        /// <summary>
+        /// Replaces the default focus outline with a game's own look: (batch, focused element, its screen-space
+        /// rectangle, seconds since focus moved). Called only while the pad is the device in use.
+        /// </summary>
+        public static Action<UISpriteBatch, UIElement, Rectangle, float> FocusRenderer;
+        private float FocusTime; //since focus last moved, for renderers that animate the change
+
         private bool ShowOutline;
         private InputManager Input; //from the last update, for focusing text boxes
         private bool Armed; //Confirm/Cancel held when the scope appeared must be released first, so one press can't act twice
@@ -89,10 +96,15 @@ namespace FSO.Client.UI.Framework
                 Focused = null;
                 return false;
             }
-            if (Focused == null || !Candidates.Contains(Focused)) Focused = InitialFocus(scope);
+            if (Focused == null || !Candidates.Contains(Focused))
+            {
+                Focused = InitialFocus(scope);
+                FocusTime = 0;
+            }
 
             ShowOutline = state.LastInputDevice == InputDevice.GamePad;
             Time += (float)state.Time.ElapsedGameTime.TotalSeconds;
+            FocusTime += (float)state.Time.ElapsedGameTime.TotalSeconds;
             if (!Armed && !pad.IsDown(PadAction.Confirm) && !pad.IsDown(PadAction.Cancel)) Armed = true;
 
             for (int i = 0; i < 4; i++)
@@ -188,6 +200,7 @@ namespace FSO.Client.UI.Framework
             if (next != null)
             {
                 Focused = next;
+                FocusTime = 0;
                 HITVM.Get()?.PlaySoundEvent(UISounds.Click);
             }
         }
@@ -271,6 +284,11 @@ namespace FSO.Client.UI.Framework
         {
             if (!ShowOutline || Focused == null || Scope == null || !Focused.WillDraw()) return;
             var rect = GlobalRect(Focused);
+            if (FocusRenderer != null)
+            {
+                FocusRenderer(batch, Focused, rect, FocusTime);
+                return;
+            }
             rect.Inflate(4, 4);
             var px = TextureGenerator.GetPxWhite(batch.GraphicsDevice);
             var color = new Color(255, 230, 90) * (0.75f + 0.25f * (float)Math.Sin(Time * 6));
