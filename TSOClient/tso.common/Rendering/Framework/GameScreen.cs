@@ -29,6 +29,7 @@ namespace FSO.Common.Rendering.Framework
 
         public VirtualCursor VirtualCursor = new VirtualCursor();
         private PointerDeviceTracker PointerDevice = new PointerDeviceTracker();
+        private PadEchoFilter EchoFilter = new PadEchoFilter();
         private bool WasCapturedBeforeCursor;
 
         public GameScreen(GraphicsDevice device)
@@ -123,7 +124,9 @@ namespace FSO.Common.Rendering.Framework
                     State.KeyboardState = new KeyboardState();
                 }
 
-                UpdatePointerDevice(time, hasFocus);
+                var raw = State.MouseState;
+                EchoFilter.Apply(State, (float)time.ElapsedGameTime.TotalSeconds, hasFocus && GamePadSettings.IgnoreEchoes);
+                UpdatePointerDevice(time, hasFocus, raw, EchoFilter.Filtering);
 
                 if (State.KeyboardState.IsKeyDown(Keys.LeftAlt) && State.MouseState.LeftButton == ButtonState.Pressed)
                 {
@@ -157,11 +160,13 @@ namespace FSO.Common.Rendering.Framework
         /// Picks the pointer device for this frame and, while it's the pad, replaces State.MouseState with the
         /// virtual cursor.
         /// </summary>
-        private void UpdatePointerDevice(GameTime time, bool hasFocus)
+        /// <param name="raw">The hardware mouse this frame, before the echo filter.</param>
+        /// <param name="ignoreMouse">The echo filter is dropping mouse input this frame.</param>
+        private void UpdatePointerDevice(GameTime time, bool hasFocus, MouseState raw, bool ignoreMouse)
         {
             var previous = State.LastInputDevice;
             var real = State.MouseState;
-            State.LastInputDevice = PointerDevice.Update(previous, real, hasFocus, State.Pad.Active, VirtualCursor.LastWarp);
+            State.LastInputDevice = PointerDevice.Update(previous, raw, hasFocus, State.Pad.Active, VirtualCursor.LastWarp, ignoreMouse);
             if (!hasFocus) return;
 
             var width = Device.PresentationParameters.BackBufferWidth;
@@ -177,12 +182,14 @@ namespace FSO.Common.Rendering.Framework
                 }
                 else if (WasCapturedBeforeCursor)
                 {
-                    //a screen just handed the pad back (e.g. a dialog opened over the lot): dialogs appear centred.
-                    VirtualCursor.MoveTo(new Point(width / 2, height / 2), width, height);
+                    //a screen just handed the pad back: start where it asked (e.g. on what it had focused), else in
+                    //the centre (e.g. a dialog opened over the lot: dialogs appear centred).
+                    VirtualCursor.MoveTo(State.PadCursorStart ?? new Point(width / 2, height / 2), width, height);
                 }
                 VirtualCursor.Apply(State, time, width, height);
             }
             WasCapturedBeforeCursor = captured;
+            if (!captured) State.PadCursorStart = null; //only for the hand-over
 
             if (VirtualCursor.WheelOffset != 0)
             {

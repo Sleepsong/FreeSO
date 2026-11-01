@@ -24,13 +24,20 @@ namespace FSO.Common.Rendering.Framework.IO
         public static PadBindings Bindings = new PadBindings();
 
         /// <summary>
+        /// Ignore the keyboard and mouse while the pad is held (<see cref="PadEchoFilter"/>), so remappers that also
+        /// send keys and mouse movement for the pad (Steam Input's desktop layout) don't act twice.
+        /// </summary>
+        public static bool IgnoreEchoes = true;
+
+        /// <summary>
         /// Applies persisted settings. If <paramref name="overridesPath"/> exists, its bindings are applied on
         /// top of the defaults; the returned string describes any lines that were skipped, or is null.
         /// </summary>
         public static string Configure(bool enabled, float deadZone, bool virtualCursor, float cursorSpeed,
-            bool swapConfirmCancel, string overridesPath, string glyphs = "auto")
+            bool swapConfirmCancel, string overridesPath, string glyphs = "auto", bool ignoreEchoes = true)
         {
             Enabled = enabled;
+            IgnoreEchoes = ignoreEchoes;
             PadGlyphs.Setting = glyphs;
             DeadZone = Math.Clamp(deadZone, 0f, 0.9f);
             VirtualCursor = virtualCursor;

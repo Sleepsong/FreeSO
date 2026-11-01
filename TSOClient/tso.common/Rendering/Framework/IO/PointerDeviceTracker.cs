@@ -23,8 +23,13 @@ namespace FSO.Common.Rendering.Framework.IO
         /// <param name="real">This frame's hardware mouse state.</param>
         /// <param name="padActive">The pad was newly used this frame (GamePadInput.Active).</param>
         /// <param name="lastWarp">Where the virtual cursor last moved the OS cursor, if anywhere.</param>
+        /// <param name="ignoreMouse">
+        /// The mouse is being ignored (see <see cref="PadEchoFilter"/>): it can't take over, and where it goes meanwhile
+        /// becomes the baseline, so it doesn't look like the player moved it when the filter lets go.
+        /// </param>
         /// <returns>The device for this frame.</returns>
-        public InputDevice Update(InputDevice current, MouseState real, bool hasFocus, bool padActive, Point? lastWarp)
+        public InputDevice Update(InputDevice current, MouseState real, bool hasFocus, bool padActive, Point? lastWarp,
+            bool ignoreMouse = false)
         {
             if (!hasFocus)
             {
@@ -34,7 +39,7 @@ namespace FSO.Common.Rendering.Framework.IO
             }
 
             var result = current;
-            if (HadFocus && MouseWasUsed(real, lastWarp)) result = InputDevice.Mouse;
+            if (HadFocus && !ignoreMouse && MouseWasUsed(real, lastWarp)) result = InputDevice.Mouse;
             else if (padActive) result = InputDevice.GamePad;
 
             LastReal = real;

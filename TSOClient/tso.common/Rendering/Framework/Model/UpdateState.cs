@@ -73,6 +73,12 @@ namespace FSO.Common.Rendering.Framework.Model
         /// </summary>
         public bool PadTextEntry;
 
+        /// <summary>
+        /// Set by a screen that is handing the pad over to the virtual cursor (it stops capturing): where the cursor
+        /// should start, in window pixels, instead of the centre. Used once, then cleared.
+        /// </summary>
+        public Point? PadCursorStart;
+
         public KeyboardState PreviousKeyboardState;
         public List<char> FrameTextInput;
 

@@ -88,6 +88,9 @@ namespace FSO.Common.Rendering.Framework.IO
         /// </summary>
         public bool Active { get; private set; }
 
+        /// <summary>Any physical button is down (d-pad included, triggers not), bound to an action or not.</summary>
+        public bool AnyButtonDown { get; private set; }
+
         private readonly bool[] Down = new bool[SlotCount];
         private readonly bool[] WasDown = new bool[SlotCount];
         private readonly bool[] Repeat = new bool[SlotCount];
@@ -140,6 +143,7 @@ namespace FSO.Common.Rendering.Framework.IO
         {
             Array.Copy(Down, WasDown, SlotCount);
             Active = false;
+            AnyButtonDown = false;
             Connected = state.IsConnected;
 
             if (!Connected || !focused || !GamePadSettings.Enabled)
@@ -200,6 +204,8 @@ namespace FSO.Common.Rendering.Framework.IO
                 }
             }
 
+            AnyButtonDown = IsAnyButtonDown(ref state);
+
             if ((lastLeft == Vector2.Zero && LeftStick != Vector2.Zero)
                 || (lastRight == Vector2.Zero && RightStick != Vector2.Zero)
                 || (lastLT == 0 && LeftTrigger > 0)
@@ -240,6 +246,23 @@ namespace FSO.Common.Rendering.Framework.IO
                 return state;
             }
             return default(GamePadState);
+        }
+
+        private static readonly Buttons[] PhysicalButtons =
+        {
+            Buttons.A, Buttons.B, Buttons.X, Buttons.Y, Buttons.Back, Buttons.Start, Buttons.BigButton,
+            Buttons.LeftShoulder, Buttons.RightShoulder, Buttons.LeftStick, Buttons.RightStick,
+            Buttons.DPadUp, Buttons.DPadDown, Buttons.DPadLeft, Buttons.DPadRight
+        };
+
+        /// <summary>Any physical button down, bound to an action or not.</summary>
+        private static bool IsAnyButtonDown(ref GamePadState state)
+        {
+            foreach (var button in PhysicalButtons)
+            {
+                if (IsButtonDown(ref state, button)) return true;
+            }
+            return false;
         }
 
         private static bool IsButtonDown(ref GamePadState state, Buttons button)
