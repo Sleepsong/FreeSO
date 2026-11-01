@@ -74,6 +74,15 @@ namespace FSO.Client.UI.Framework
         private float Time;
         private readonly List<UIElement> Candidates = new List<UIElement>();
 
+        /// <summary>What the pad can move to in the current scope, as of the last update.</summary>
+        public IReadOnlyList<UIElement> Targets => Candidates;
+
+        /// <summary>
+        /// The navigator whose focus <see cref="FocusRenderer"/> is drawing, while it runs (null otherwise), so a
+        /// renderer can see the other targets, e.g. to keep a label clear of them.
+        /// </summary>
+        public static UIFocusNavigator Drawing { get; private set; }
+
         /// <summary>
         /// Runs one frame of navigation inside <paramref name="scope"/>. Returns false, and does nothing, if the scope
         /// has nothing focusable, so the caller can leave the pad to something else.
@@ -286,7 +295,9 @@ namespace FSO.Client.UI.Framework
             var rect = GlobalRect(Focused);
             if (FocusRenderer != null)
             {
-                FocusRenderer(batch, Focused, rect, FocusTime);
+                Drawing = this;
+                try { FocusRenderer(batch, Focused, rect, FocusTime); }
+                finally { Drawing = null; }
                 return;
             }
             rect.Inflate(4, 4);
