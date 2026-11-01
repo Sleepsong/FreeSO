@@ -64,6 +64,7 @@ namespace FSO.Common.Rendering.Framework
             State.Pad.Update(time, hasFocus);
             State.PadWasCaptured = State.PadCaptured;
             State.PadCaptured = false;
+            State.PadTextEntry = false;
 
             if (touchMode)
             {

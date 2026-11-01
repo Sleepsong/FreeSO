@@ -342,6 +342,74 @@ namespace FSO.Client.UI.Controls
             }
         }
 
+        /// <summary>Whether the user can't edit this text (display-only).</summary>
+        public bool IsReadOnly => m_IsReadOnly;
+
+        /// <summary>
+        /// Types <paramref name="text"/> at the cursor, replacing any selection, as the keyboard would: for on-screen
+        /// keyboards. Respects <see cref="MaxChars"/>/<see cref="MaxLines"/> and raises <see cref="OnChange"/>.
+        /// </summary>
+        public void PadType(string text)
+        {
+            if (m_IsReadOnly || string.IsNullOrEmpty(text)) return;
+            var changed = PadDeleteSelection();
+            var room = MaxChars - m_SBuilder.Length;
+            if (room > 0)
+            {
+                if (text.Length > room) text = text.Substring(0, room);
+                var index = PadCursorIndex();
+                m_SBuilder.Insert(index, text);
+                SelectionStart = index + text.Length;
+                changed = true;
+            }
+            if (changed) PadEdited();
+        }
+
+        /// <summary>Deletes the selection, or the character before the cursor, as Backspace would. See <see cref="PadType"/>.</summary>
+        public void PadBackspace()
+        {
+            if (m_IsReadOnly) return;
+            if (!PadDeleteSelection())
+            {
+                var index = PadCursorIndex();
+                if (index == 0) return;
+                var count = (index > 1 && m_SBuilder[index - 1] == '\n' && m_SBuilder[index - 2] == '\r') ? 2 : 1;
+                m_SBuilder.Remove(index - count, count);
+                SelectionStart = index - count;
+            }
+            PadEdited();
+        }
+
+        private int PadCursorIndex()
+        {
+            return (SelectionStart < 0) ? m_SBuilder.Length : Math.Min(SelectionStart, m_SBuilder.Length);
+        }
+
+        private bool PadDeleteSelection()
+        {
+            if (SelectionStart < 0 || SelectionEnd < 0 || SelectionStart == SelectionEnd)
+            {
+                SelectionEnd = -1;
+                return false;
+            }
+            var from = Math.Min(SelectionStart, SelectionEnd);
+            var to = Math.Min(m_SBuilder.Length, Math.Max(SelectionStart, SelectionEnd));
+            m_SBuilder.Remove(from, to - from);
+            SelectionStart = from;
+            SelectionEnd = -1;
+            return true;
+        }
+
+        private void PadEdited()
+        {
+            Control_ValidateText();
+            m_cursorBlink = true;
+            m_DrawDirty = true;
+            Invalidate();
+            Control_ScrollTo(Control_GetSelectionStart());
+            OnChange?.Invoke(this);
+        }
+
         public void SelectionToEnd()
         {
             SelectionEnd = -1;

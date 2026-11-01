@@ -67,6 +67,12 @@ namespace FSO.Common.Rendering.Framework.Model
         /// <summary>Whether PadCaptured was set during the previous frame (i.e. the virtual cursor is standing down now).</summary>
         public bool PadWasCaptured;
 
+        /// <summary>
+        /// Set during a frame by an on-screen keyboard that is taking the pad's input: other pad navigation (screens,
+        /// dialogs) should leave it alone. Reset every frame.
+        /// </summary>
+        public bool PadTextEntry;
+
         public KeyboardState PreviousKeyboardState;
         public List<char> FrameTextInput;
 

@@ -70,6 +70,9 @@ namespace FSO.Common.Rendering.Framework.IO
         public bool Connected { get; private set; }
         public int PlayerIndex { get; private set; } = -1;
 
+        /// <summary>The connected pad's name as the platform reports it (e.g. for <see cref="PadGlyphs"/>), or "".</summary>
+        public string DisplayName { get; private set; } = "";
+
         /// <summary>Raw state of the active pad (no dead zone applied).</summary>
         public GamePadState State { get; private set; }
 
@@ -219,6 +222,7 @@ namespace FSO.Common.Rendering.Framework.IO
                 var state = GamePad.GetState(PlayerIndex, GamePadDeadZone.None, GamePadDeadZone.None);
                 if (state.IsConnected) return state;
                 PlayerIndex = -1;
+                DisplayName = "";
                 NextScan = now;
             }
 
@@ -227,10 +231,12 @@ namespace FSO.Common.Rendering.Framework.IO
 
             for (int i = 0; i < GamePad.MaximumGamePadCount; i++)
             {
-                if (!GamePad.GetCapabilities(i).IsConnected) continue;
+                var caps = GamePad.GetCapabilities(i);
+                if (!caps.IsConnected) continue;
                 var state = GamePad.GetState(i, GamePadDeadZone.None, GamePadDeadZone.None);
                 if (!state.IsConnected) continue;
                 PlayerIndex = i;
+                DisplayName = caps.DisplayName ?? "";
                 return state;
             }
             return default(GamePadState);

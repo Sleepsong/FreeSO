@@ -32,6 +32,15 @@ namespace FSO.Client.UI.Framework
         void PadActivate();
     }
 
+    /// <summary>
+    /// A scope whose navigable content is a set of subtrees rather than all of its children: for screens that keep
+    /// panels for other modes on screen (slid away or faded), which must not be navigated.
+    /// </summary>
+    public interface IPadScopeRoots
+    {
+        IEnumerable<UIElement> PadRoots { get; }
+    }
+
     /// <summary>A focus scope, usually a dialog, that chooses its initial focus and what Cancel does.</summary>
     public interface IPadScope
     {
@@ -53,6 +62,7 @@ namespace FSO.Client.UI.Framework
         public UIElement Focused { get; private set; }
 
         private bool ShowOutline;
+        private InputManager Input; //from the last update, for focusing text boxes
         private bool Armed; //Confirm/Cancel held when the scope appeared must be released first, so one press can't act twice
         private float Time;
         private readonly List<UIElement> Candidates = new List<UIElement>();
@@ -64,6 +74,7 @@ namespace FSO.Client.UI.Framework
         public bool Update(UpdateState state, UIElement scope)
         {
             var pad = state.Pad;
+            Input = state.InputManager;
             if (scope != Scope)
             {
                 Scope = scope;
@@ -72,7 +83,7 @@ namespace FSO.Client.UI.Framework
             }
 
             Candidates.Clear();
-            Collect(scope, Candidates);
+            CollectScope(scope, Candidates);
             if (Candidates.Count == 0)
             {
                 Focused = null;
@@ -107,8 +118,20 @@ namespace FSO.Client.UI.Framework
         {
             if (scope == null) return false;
             var found = new List<UIElement>();
-            Collect(scope, found);
+            CollectScope(scope, found);
             return found.Count > 0;
+        }
+
+        private static void CollectScope(UIElement scope, List<UIElement> found)
+        {
+            if (scope is IPadScopeRoots multi)
+            {
+                foreach (var root in multi.PadRoots)
+                {
+                    if (root != null) Collect(root, found);
+                }
+            }
+            else Collect(scope, found);
         }
 
         private static void Collect(UIElement element, List<UIElement> found)
@@ -122,6 +145,11 @@ namespace FSO.Client.UI.Framework
             if (element is UIButton button)
             {
                 if (!button.Disabled && button.HasClickHandler) found.Add(element);
+                return;
+            }
+            if (element is UITextEdit edit)
+            {
+                if (!edit.IsReadOnly) found.Add(element); //Confirm gives it keyboard focus (and an on-screen keyboard, if any)
                 return;
             }
             if (element is UIContainer container)
@@ -221,6 +249,7 @@ namespace FSO.Client.UI.Framework
         {
             if (element is IPadNavigable navigable) navigable.PadActivate();
             else if (element is UIButton button) button.PerformClick();
+            else if (element is UITextEdit edit) Input?.SetFocus(edit);
         }
 
         /// <summary>An element's bounds in screen space (the space UI draws in).</summary>

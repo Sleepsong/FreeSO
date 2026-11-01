@@ -28,9 +28,10 @@ namespace FSO.Common.Rendering.Framework.IO
         /// top of the defaults; the returned string describes any lines that were skipped, or is null.
         /// </summary>
         public static string Configure(bool enabled, float deadZone, bool virtualCursor, float cursorSpeed,
-            bool swapConfirmCancel, string overridesPath)
+            bool swapConfirmCancel, string overridesPath, string glyphs = "auto")
         {
             Enabled = enabled;
+            PadGlyphs.Setting = glyphs;
             DeadZone = Math.Clamp(deadZone, 0f, 0.9f);
             VirtualCursor = virtualCursor;
             CursorSpeed = Math.Clamp(cursorSpeed, 0.1f, 5f);

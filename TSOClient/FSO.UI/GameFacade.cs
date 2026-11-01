@@ -64,7 +64,8 @@ namespace FSO.Client
                 settings.GamePadVirtualCursor,
                 settings.GamePadCursorSpeed,
                 settings.GamePadSwapConfirmCancel,
-                Path.Combine(FSOEnvironment.UserDir, "gamepad.ini"));
+                Path.Combine(FSOEnvironment.UserDir, "gamepad.ini"),
+                settings.GamePadGlyphs);
             if (problems != null) Console.WriteLine("Gamepad bindings: " + problems);
         }
 

@@ -300,6 +300,7 @@ namespace FSO.Client.UI
 
             state.InputManager = inputManager;
             Content.Content.Get()?.Changes.RunResModifications();
+            Overlay?.Update(state); //first, so it can take the pad before screens and dialogs see it
             mainUI.Update(state);
             UpdateDialogNavigation(state);
 
@@ -330,8 +331,15 @@ namespace FSO.Client.UI
             TooltipProperties = state.UIState.TooltipProperties;
         }
 
+        /// <summary>
+        /// Drawn above every screen and dialog, and updated before them, so it can take the pad first: an on-screen
+        /// keyboard. It isn't part of the UI tree; it lays itself out in screen space.
+        /// </summary>
+        public UIElement Overlay;
+
         public void PreDraw(UISpriteBatch SBatch)
         {
+            Overlay?.PreDraw(SBatch);
             mainUI.PreDraw(SBatch);
         }
 
@@ -351,6 +359,7 @@ namespace FSO.Client.UI
                 }
             }
 
+            if (state.PadTextEntry) return; //an on-screen keyboard has the pad; keep the dialog's focus for afterwards
             if (top != null && state.Pad.Connected)
             {
                 if (DialogNavigator.Scope != top.Dialog) DialogEmptyFrames = 0;
@@ -376,6 +385,7 @@ namespace FSO.Client.UI
         {
             mainUI.Draw(SBatch);
             DialogNavigator.Draw(SBatch);
+            Overlay?.Draw(SBatch);
 
             if (TooltipProperties.UpdateDead) TooltipProperties.Show = false;
             if (Tooltip != null && TooltipProperties.Show) DrawTooltip(SBatch, TooltipProperties.Position, TooltipProperties.Opacity, TooltipProperties.Color);
