@@ -117,7 +117,6 @@ namespace FSO.SimAntics.Primitives
                         case VMDialogType.TS1Neighborhood:
                         case VMDialogType.TS1StudioTown:
                         case VMDialogType.TS1Magictown:
-                        case VMDialogType.TS1PhoneBook:
                             int number;
                             if (VMTravelLog.Enabled && IsTravelDialog(curDialog.Type))
                                 VMTravelLog.Dialog(context, curDialog.Type, $"answered: code {curDialog.ResponseCode}, text '{curDialog.ResponseText}'" +
@@ -139,6 +138,9 @@ namespace FSO.SimAntics.Primitives
                             return VMPrimitiveExitCode.GOTO_TRUE;
                         case VMDialogType.TS1PetChoice:
                         case VMDialogType.TS1Clothes:
+                        case VMDialogType.TS1PhoneBook:
+                            //cancelled (response code 0). The phone book used to fall through to parsing the response
+                            //text, so Cancel's "-1" was taken as a neighbour id and the call carried on with "Unknown".
                             if (curDialog.ResponseCode == 0) return VMPrimitiveExitCode.GOTO_FALSE;
                             goto case VMDialogType.NumericEntry;
                     }
