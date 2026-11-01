@@ -950,7 +950,12 @@ namespace FSO.SimAntics
                     }
                     break;
                 case VMPersonDataVariable.CurrentOutfit:
-                    if (Thread.Context.VM.TS1) BodyOutfit = VMSuitProvider.GetPersonSuitTS1(this, (ushort)value);
+                    if (Thread.Context.VM.TS1)
+                    {
+                        //a suit it doesn't know (or can't find for this person) keeps the current outfit
+                        var ts1Suit = VMSuitProvider.GetPersonSuitTS1(this, (ushort)value);
+                        if (ts1Suit != null) BodyOutfit = ts1Suit;
+                    }
                     else
                     {
                         var suit = VMSuitProvider.GetSuit(Thread.Stack.LastOrDefault(), Engine.Scopes.VMSuitScope.Person, (ushort)value);
