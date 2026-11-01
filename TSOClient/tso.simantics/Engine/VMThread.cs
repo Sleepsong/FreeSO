@@ -1165,11 +1165,13 @@ namespace FSO.SimAntics.Engine
             foreach (var item in input.Queue) Queue.Add(new VMQueuedAction(item, context));
             ActiveQueueBlock = input.ActiveQueueBlock;
 
-            //direct control actions saved by a TS1 frontend use a runtime-only routine (VMDirectControlFrame.TS1Routine)
-            //and can't be resumed. Drop them; the frontend re-enables direct control if the player is still using it.
-            //If one was running, its stack is unresumable too, so restart the avatar on its first tick.
+            //direct control actions saved under TS1 use a runtime-only routine (VMDirectControlFrame.TS1Routine) and can't
+            //be resumed: their routine ID either resolves to nothing or to unrelated content with the same ID. Drop them;
+            //the frontend re-enables direct control if the player is still using it. If one was running, its stack is
+            //unresumable too, so restart the avatar on its first tick. (TSO's routine 9001 is real content and loads fine.)
             var active = (ActiveQueueBlock >= 0 && ActiveQueueBlock < Queue.Count) ? Queue[ActiveQueueBlock] : null;
-            var removed = Queue.RemoveAll(action => action.ActionRoutine == null && action.Flags.HasFlag(TTABFlags.FSODirectControl));
+            var removed = Queue.RemoveAll(action => action.Flags.HasFlag(TTABFlags.FSODirectControl)
+                && (context.VM.TS1 || action.ActionRoutine == null));
             if (removed > 0)
             {
                 ActiveQueueBlock = (sbyte)((active == null) ? -1 : Queue.IndexOf(active));
