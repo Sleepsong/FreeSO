@@ -284,7 +284,7 @@ namespace FSO.Client.UI
             state.MouseOverWindow = mousePosition.X > 0 && mousePosition.Y > 0 &&
                                     mousePosition.X < bounds.Width && mousePosition.Y < bounds.Height;
             if (FSOEnvironment.SoftwareKeyboard) state.MouseOverWindow = true;
-            state.WindowFocused = GameFacade.Game.IsActive;
+            state.WindowFocused = GameFacade.Game.HasFocus;
 
             /** 
              * Handle the mouse events from the previous frame

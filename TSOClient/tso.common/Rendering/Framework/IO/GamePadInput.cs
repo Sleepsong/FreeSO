@@ -91,6 +91,9 @@ namespace FSO.Common.Rendering.Framework.IO
         /// <summary>Any physical button is down (d-pad included, triggers not), bound to an action or not.</summary>
         public bool AnyButtonDown { get; private set; }
 
+        /// <summary>The pad was used this frame while the window was treated as unfocused (so it was ignored).</summary>
+        public bool UsedWhileUnfocused { get; private set; }
+
         private readonly bool[] Down = new bool[SlotCount];
         private readonly bool[] WasDown = new bool[SlotCount];
         private readonly bool[] Repeat = new bool[SlotCount];
@@ -145,6 +148,7 @@ namespace FSO.Common.Rendering.Framework.IO
             Active = false;
             AnyButtonDown = false;
             Connected = state.IsConnected;
+            UsedWhileUnfocused = Connected && !focused && GamePadSettings.Enabled && InUse(state);
 
             if (!Connected || !focused || !GamePadSettings.Enabled)
             {
