@@ -20,6 +20,9 @@ namespace FSO.SimAntics.Engine
     {
         /// <summary>Log file to append to, or null to disable the trace.</summary>
         public static string Path;
+
+        /// <summary>Written at the top of each session's entries (e.g. frontend version and launch arguments).</summary>
+        public static string SessionHeader = "";
         public static bool Enabled => Path != null;
 
         private const long RotateBytes = 4 * 1024 * 1024; //checked once per session; the old log is kept as *.old
@@ -857,7 +860,7 @@ namespace FSO.SimAntics.Engine
             }
             catch (Exception) { }
             output.AppendLine();
-            output.AppendLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} {VMExceptionLog.SessionHeader} =====");
+            output.AppendLine($"===== {DateTime.Now:yyyy-MM-dd HH:mm:ss} {SessionHeader} =====");
         }
     }
 }
