@@ -168,6 +168,7 @@ namespace FSO.SimAntics.Primitives
                     context.VM.TS1State.ActivateFamily(context.VM, crossDataDT.ActiveFamily);
                     var control = context.VM.Context.CreateObjectInstance(crossDataDT.DowntownSimGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
                     ((VMAvatar)control).AvatarState.Permissions = Model.TSOPlatform.VMTSOAvatarPermissions.Owner;
+                    MakeFamily((VMAvatar)control);
                     context.VM.SetGlobalValue(3, control.ObjectID);
                     context.VM.SendCommand(new VMNetChangeControlCmd() { TargetID = control.ObjectID });
 
@@ -265,6 +266,7 @@ namespace FSO.SimAntics.Primitives
                         context.VM.TS1State.ActivateFamily(context.VM, crossData2.ActiveFamily);
                         var control2 = context.VM.Context.CreateObjectInstance(crossData2.DowntownSimGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
                         ((VMAvatar)control2).AvatarState.Permissions = Model.TSOPlatform.VMTSOAvatarPermissions.Owner;
+                        MakeFamily((VMAvatar)control2);
                         context.VM.SetGlobalValue(3, control2.ObjectID);
                         context.VM.SendCommand(new VMNetChangeControlCmd() { TargetID = control2.ObjectID });
 
@@ -344,6 +346,18 @@ namespace FSO.SimAntics.Primitives
                 // 43. FamilySpellsIntoController
             }
             return VMPrimitiveExitCode.GOTO_TRUE;
+        }
+
+        /// <summary>The Sim who travelled is family on the lot they arrive at, not a visitor (see VMAvatar.InheritNeighbor).</summary>
+        private static void MakeFamily(VMAvatar sim)
+        {
+            if (sim == null) return;
+            var type = sim.GetPersonData(VMPersonDataVariable.PersonType);
+            if (type != 0)
+            {
+                if (VMTravelLog.Enabled) VMTravelLog.Write($"{sim} arrived with person type {type} (a visitor): made family (0)");
+                sim.SetPersonData(VMPersonDataVariable.PersonType, 0);
+            }
         }
 
         /// <summary>

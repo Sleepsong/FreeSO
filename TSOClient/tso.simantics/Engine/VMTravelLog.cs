@@ -255,6 +255,11 @@ namespace FSO.SimAntics.Engine
                 var output = new StringBuilder();
                 output.Append($"pie menu on {Name(obj)} (GUID 0x{obj.Object?.OBJ?.GUID:X8}) for {Name(caller)}: {shown} shown" +
                     $" | house {vm.GetGlobalValue(10)}" + Globals(vm));
+                if (caller is VMAvatar sim)
+                    output.Append($"\n  {Name(caller)}: person type {sim.GetPersonData(VMPersonDataVariable.PersonType)}," +
+                        $" greet status {sim.GetPersonData(VMPersonDataVariable.GreetStatus)}, family {sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber)}," +
+                        $" age {sim.GetPersonData(VMPersonDataVariable.PersonsAge)}{(sim.IsPet ? ", a pet" : "")}" +
+                        $" (TS1 counts a Sim as a visitor when person type is 1 and greet status is under 2)");
                 var lines = new List<string>();
                 Explain(vm, obj, caller, false, lines);
                 Explain(vm, obj, caller, true, lines);
@@ -475,9 +480,40 @@ namespace FSO.SimAntics.Engine
                 var reasons = attempts.Select(x => x.Substring(x.IndexOf(": ") + 2)).GroupBy(x => x).OrderByDescending(x => x.Count());
                 output.Append("\n  refused: " + string.Join(", ", reasons.Select(x => $"{x.Count()}x {x.Key}")));
                 foreach (var attempt in attempts.Take(48)) output.Append("\n    " + attempt);
+
+                //what the things in the way are doing (a car that should have driven off, say)
+                List<VMEntity> obstacles;
+                lock (Lock)
+                {
+                    obstacles = Obstacles.ToList();
+                    Obstacles.Clear();
+                }
+                var mine = obj?.MultitileGroup;
+                var leads = obstacles.Select(x => x.MultitileGroup?.BaseObject ?? x).Where(x => x.MultitileGroup != mine)
+                    .Distinct().OrderByDescending(x => x.MultitileGroup?.Objects.Count ?? 1).Take(4).ToList();
+                foreach (var lead in leads)
+                {
+                    output.Append($"\n  in the way: {Name(lead)} at {Tile(lead)} facing {lead.Direction}");
+                    DumpEntity(output, lead, null);
+                }
                 Write(output.ToString());
             }
             catch (Exception) { }
+            finally
+            {
+                lock (Lock) Obstacles.Clear();
+            }
+        }
+
+        private static readonly List<VMEntity> Obstacles = new List<VMEntity>();
+
+        /// <summary>An object that refused a placement in a followed script (see <see cref="Placement"/>).</summary>
+        public static void NoteObstacle(VMEntity obstacle)
+        {
+            lock (Lock)
+            {
+                if (Obstacles.Count < 200) Obstacles.Add(obstacle);
+            }
         }
 
         private static string Tile(VMEntity entity)

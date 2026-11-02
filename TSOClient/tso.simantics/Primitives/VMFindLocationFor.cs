@@ -90,6 +90,7 @@ namespace FSO.SimAntics.Primitives
         {
             var placed = obj.SetPosition(pos, dir, context, flags);
             attempts?.Add($"({pos.TileX},{pos.TileY},{pos.Level}) {dir}: {placed.Status}" + ((placed.Object != null && placed.Status != VMPlacementError.Success) ? $" [{placed.Object}]" : ""));
+            if (attempts != null && placed.Object != null && placed.Status != VMPlacementError.Success) VMTravelLog.NoteObstacle(placed.Object);
             return placed.Status == VMPlacementError.Success;
         }
 
