@@ -515,6 +515,12 @@ namespace FSO.SimAntics.Engine
                     output.Append($"\n  in the way: {Name(lead)} at {Tile(lead)} facing {lead.Direction}");
                     DumpEntity(output, lead, null);
                 }
+
+                //a car that couldn't be placed, or was placed well away from its portal: map the ground around it
+                var far = obj != null && refObj != null && obj.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD &&
+                    (Math.Abs(obj.Position.TileX - refObj.Position.TileX) + Math.Abs(obj.Position.TileY - refObj.Position.TileY)) > 3;
+                if (refObj != null && (result != VMPrimitiveExitCode.GOTO_TRUE || far))
+                    output.Append(Map(frame.VM, refObj, obj));
                 Write(output.ToString());
             }
             catch (Exception) { }
@@ -533,6 +539,60 @@ namespace FSO.SimAntics.Engine
             {
                 if (Obstacles.Count < 200) Obstacles.Add(obstacle);
             }
+        }
+
+        /// <summary>
+        /// The tiles around a reference object: what's on each (objects, the reference, where the placed object's lead
+        /// tile went), the buildable area, and the floor patterns, to see where a lot's road and drive are.
+        /// </summary>
+        private static string Map(VM vm, VMEntity refObj, VMEntity placed)
+        {
+            var arch = vm.Context.Architecture;
+            var level = refObj.Position.Level;
+            int cx = refObj.Position.TileX, cy = refObj.Position.TileY, radius = 16;
+            int x0 = Math.Max(0, cx - radius), x1 = Math.Min(arch.Width - 1, cx + radius);
+            int y0 = Math.Max(0, cy - radius), y1 = Math.Min(arch.Height - 1, cy + radius);
+            var buildable = arch.BuildableArea;
+            var mine = placed?.MultitileGroup;
+            var patterns = new Dictionary<ushort, char>();
+            const string letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+            var objects = new StringBuilder();
+            var floors = new StringBuilder();
+            for (int y = y0; y <= y1; y++)
+            {
+                objects.Append($"\n    {y,3} ");
+                floors.Append($"\n    {y,3} ");
+                for (int x = x0; x <= x1; x++)
+                {
+                    var pos = FSO.LotView.Model.LotTilePos.FromBigTile((short)x, (short)y, level);
+                    var here = vm.Context.ObjectQueries.GetObjectsAt(pos) ?? new List<VMEntity>();
+                    char c;
+                    if (x == cx && y == cy) c = 'P';
+                    else if (placed != null && placed.Position.TileX == x && placed.Position.TileY == y && placed.Position.Level == level) c = 'X';
+                    else if (here.Any(e => e.MultitileGroup == mine && mine != null)) c = 'x';
+                    else if (here.Any(e => e is VMAvatar)) c = 's';
+                    else if (here.Any(e => (e.MultitileGroup?.Objects.Count ?? 1) >= 12)) c = 'c'; //a car or other large object
+                    else if (here.Count > 0) c = '#';
+                    else c = buildable.Contains(x, y) ? '.' : ',';
+                    objects.Append(c);
+
+                    var floor = arch.GetFloor((short)x, (short)y, level).Pattern;
+                    if (!patterns.TryGetValue(floor, out var letter))
+                    {
+                        letter = (floor == 0) ? '_' : (patterns.Count < letters.Length ? letters[patterns.Count] : '?');
+                        patterns[floor] = letter;
+                    }
+                    floors.Append(letter);
+                }
+            }
+            var header = "     x " + string.Concat(Enumerable.Range(x0, x1 - x0 + 1).Select(x => (x % 10).ToString()));
+            return $"\n  around {Name(refObj)} (tiles {x0}-{x1} across, {y0}-{y1} down; {arch.Width}x{arch.Height} lot, buildable {buildable}):" +
+                "\n  P the reference, X where the placed object's lead tile went, x its other tiles, s a Sim, c part of a car or other big object," +
+                "\n  # any other object, . empty and buildable, , empty and not buildable (the street, usually)" +
+                $"\n{header}" + objects +
+                "\n  floor patterns (_ none): " + string.Join(", ", patterns.Where(p => p.Key != 0).Select(p => $"{p.Value}={p.Key}")) +
+                $"\n{header}" + floors;
         }
 
         private static string Tile(VMEntity entity)
