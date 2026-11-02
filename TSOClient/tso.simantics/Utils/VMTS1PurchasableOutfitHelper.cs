@@ -77,7 +77,7 @@ namespace FSO.SimAntics.Utils
             var bodyStrings = avatar.Object.Resource.Get<FSO.Files.Formats.IFF.Chunks.STR>(avatar.Object.OBJ.BodyStringID);
 
             var bsInd = OutfitTypeToInd[outfitType];
-            var prevInd = Array.IndexOf(validSuits, bodyStrings.GetString(bsInd).Split(';')[0].ToLowerInvariant());
+            var prevInd = Array.IndexOf(validSuits, CurrentSuit(bodyStrings, bsInd).ToLowerInvariant());
             return (short)prevInd;
         }
 
@@ -87,10 +87,12 @@ namespace FSO.SimAntics.Utils
             var bodyStrings = avatar.Object.Resource.Get<FSO.Files.Formats.IFF.Chunks.STR>(avatar.Object.OBJ.BodyStringID);
 
             var bsInd = OutfitTypeToInd[outfitType];
-            var oldSuit = bodyStrings.GetString(bsInd).Split(';')[0];
-            var prevInd = Array.FindIndex(validSuits, x => x.Item1.ToLowerInvariant() == bodyStrings.GetString(bsInd).Split(';')[0].ToLowerInvariant());
+            var oldSuit = CurrentSuit(bodyStrings, bsInd);
+            var prevInd = Array.FindIndex(validSuits, x => x.Item1.ToLowerInvariant() == oldSuit.ToLowerInvariant());
 
+            if (newIndex < 0 || newIndex >= validSuits.Length) return (short)prevInd;
             var newSuit = validSuits[newIndex];
+            EnsureSlot(bodyStrings, bsInd);
             bodyStrings.SetString(bsInd, newSuit.Item1, STRLangCode.EnglishUS);
 
             if (outfitType == 0 && newSuit.Item2 != "")
@@ -108,6 +110,30 @@ namespace FSO.SimAntics.Utils
             Content.Content.Get().Neighborhood.AvatarChanged(avatar.Object.OBJ.GUID);
 
             return (short)prevInd;
+        }
+
+        /// <summary>
+        /// A Sim from before an expansion pack has no slot for its outfits yet: adds empty ones up to it, so a bought
+        /// outfit is kept. If the strings can't be grown (languages of different lengths), the purchase just won't stick.
+        /// </summary>
+        private static void EnsureSlot(STR strings, int index)
+        {
+            try
+            {
+                while (strings.Length <= index) strings.InsertString(strings.Length, new STRItem(""));
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        /// <summary>
+        /// The person's current outfit of a kind, or "" if they don't have one: Sims made before an expansion pack (or
+        /// saved without it) have no string for its outfits, so buying one is their first.
+        /// </summary>
+        private static string CurrentSuit(STR bodyStrings, short index)
+        {
+            return (bodyStrings.GetString(index) ?? "").Split(';')[0];
         }
 
         public static string TilEQ(string item)
