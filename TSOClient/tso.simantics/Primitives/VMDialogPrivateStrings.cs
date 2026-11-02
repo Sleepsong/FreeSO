@@ -19,6 +19,22 @@ namespace FSO.SimAntics.Primitives
             {VMDialogType.TS1Magictown, 7 },
         };
 
+        /// <summary>The dialogs on the way between lots, for <see cref="VMTravelLog"/>.</summary>
+        private static bool IsTravelDialog(VMDialogType type)
+        {
+            switch (type)
+            {
+                case VMDialogType.NumericEntry: //downtown, in TS1
+                case VMDialogType.TS1Vacation:
+                case VMDialogType.TS1Neighborhood:
+                case VMDialogType.TS1StudioTown:
+                case VMDialogType.TS1Magictown:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public override VMPrimitiveExitCode Execute(VMStackFrame context, VMPrimitiveOperand args)
         {
             return ExecuteGeneric(context, args, context.ScopeResource.Get<STR>(301));
@@ -36,6 +52,8 @@ namespace FSO.SimAntics.Primitives
                 //so additional blocking dialogs must wait.
                 if (context.VM.TS1 && context.VM.GlobalBlockingDialog != null) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                 VMDialogHandler.ShowDialog(context, operand, table);
+                if (VMTravelLog.Enabled && IsTravelDialog(operand.Type))
+                    VMTravelLog.Dialog(context, operand.Type, "shown" + (((operand.Flags & VMDialogFlags.Continue) != 0) ? " (not waiting for an answer)" : ""));
 
                 if ((operand.Flags & VMDialogFlags.Continue) == 0)
                 {
@@ -101,6 +119,9 @@ namespace FSO.SimAntics.Primitives
                         case VMDialogType.TS1Magictown:
                         case VMDialogType.TS1PhoneBook:
                             int number;
+                            if (VMTravelLog.Enabled && IsTravelDialog(curDialog.Type))
+                                VMTravelLog.Dialog(context, curDialog.Type, $"answered: code {curDialog.ResponseCode}, text '{curDialog.ResponseText}'" +
+                                    (curDialog.Responded ? "" : " (timed out)"));
                             if (!int.TryParse(curDialog.ResponseText, out number)) return VMPrimitiveExitCode.GOTO_FALSE;
 
                             var tempNumber = ((operand.Flags & VMDialogFlags.UseTemp1) > 0) ? 1 : 0;

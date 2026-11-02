@@ -665,6 +665,9 @@ namespace FSO.SimAntics
 
         public void SignalLotSwitch(uint lotId)
         {
+            if (Engine.VMTravelLog.Enabled)
+                Engine.VMTravelLog.Write($"lot switch requested: lot {(short)lotId}{(((short)lotId == -1) ? " (home)" : "")}" +
+                    (OnRequestLotSwitch == null ? " (nothing is listening!)" : ""));
             OnRequestLotSwitch?.Invoke(lotId);
         }
 

@@ -16,6 +16,17 @@ namespace FSO.SimAntics.Primitives
     {
         public override VMPrimitiveExitCode Execute(VMStackFrame context, VMPrimitiveOperand args)
         {
+            if (!VMTravelLog.Enabled) return Run(context, args);
+            var call = ((VMGenericTS1CallOperand)args).Call;
+            var temps = context.Thread.TempRegisters;
+            short temp0 = temps[0], temp1 = temps[1];
+            var result = Run(context, args);
+            VMTravelLog.TS1Call(context, call, temp0, temp1, result);
+            return result;
+        }
+
+        private VMPrimitiveExitCode Run(VMStackFrame context, VMPrimitiveOperand args)
+        {
             var operand = (VMGenericTS1CallOperand)args;
 
             var inventoryInd = 10;
@@ -83,10 +94,10 @@ namespace FSO.SimAntics.Primitives
                     context.VM.Context.Architecture.BuildBuyEnabled = true;
                     context.VM.SignalGenericVMEvt(VMEventType.TS1BuildBuyChange, 1);
                     break;
-                /*
-                 GetDistanceToCameraInTemp0 = 12,
-                 AbortInteractions = 13, //abort all interactions associated with the stack object
-               **/
+                // 12. GetDistanceToCameraInTemp0
+                case VMGenericTS1CallMode.AbortInteractions: //13
+                    AbortInteractionsWith(context);
+                    return VMPrimitiveExitCode.GOTO_TRUE;
                 case VMGenericTS1CallMode.HouseRadioStationEqualsTemp0: //14
                     context.VM.SetGlobalValue(31, context.Thread.TempRegisters[0]);
                     return VMPrimitiveExitCode.GOTO_TRUE;
@@ -328,6 +339,36 @@ namespace FSO.SimAntics.Primitives
                 // 43. FamilySpellsIntoController
             }
             return VMPrimitiveExitCode.GOTO_TRUE;
+        }
+
+        /// <summary>
+        /// Abort Interactions (13): every Sim's interactions with the stack object are cancelled, the way they are when
+        /// a Sim leaves the lot (see the TSO call LeaveLot): queued ones are dropped, and one that is running gets the
+        /// cancel flag, which the interaction's script checks to wind down. This was a no-op, so a Sim could wait on an
+        /// object or NPC whose script had already given up on them. The stack object's own queue, and the interaction
+        /// making this call, are left alone.
+        /// </summary>
+        private static void AbortInteractionsWith(VMStackFrame context)
+        {
+            var target = context.StackObject;
+            if (target == null) return;
+            var running = context.ActionTree ? context.Thread.ActiveAction : null;
+            int cancelled = 0;
+            foreach (var avatar in context.VM.Context.ObjectQueries.Avatars.ToList())
+            {
+                if (avatar == target || avatar.Thread == null) continue;
+                foreach (var action in avatar.Thread.Queue.ToList())
+                {
+                    if (action == running) continue;
+                    var involved = action.Callee == target || action.IconOwner == target;
+                    if (!involved && action == avatar.Thread.ActiveAction)
+                        involved = avatar.Thread.Stack.Any(x => x.Callee == target || x.StackObject == target);
+                    if (!involved) continue;
+                    avatar.Thread.CancelAction(action.UID);
+                    cancelled++;
+                }
+            }
+            if (VMTravelLog.Enabled) VMTravelLog.Write($"abort interactions with {target}: {cancelled} cancelled");
         }
 
         private short GetIData(List<InventoryItem> inventory, uint guid)
