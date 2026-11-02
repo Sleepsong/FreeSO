@@ -288,6 +288,7 @@ namespace FSO.SimAntics.Engine
         }
 
         public void Tick(){
+            if (VMTravelLog.Enabled) VMTravelLog.Running = this;
 #if IDE_COMPAT
             if (ThreadBreak == VMThreadBreakMode.Pause) return;
             else if (ThreadBreak == VMThreadBreakMode.Reset)
@@ -935,7 +936,13 @@ namespace FSO.SimAntics.Engine
                 }
                 else if (avatar.IsPet) return null; //not allowed
 
-                var isVisitor = avatar.GetPersonData(VMPersonDataVariable.PersonType) == 1 && avatar.GetPersonData(VMPersonDataVariable.GreetStatus) < 2;
+                //a Sim of the family being played is never a visitor, wherever they are. Away from home a script can mark
+                //them person type 1 (Makin' Magic's lots do, after the hole and ped marker set greet status 1), and the
+                //interactions meant for them don't allow visitors: Magic Town's hole has Jump In, Go Home and Go
+                //Elsewhere, and a Sim who came through it couldn't get home.
+                var family = Context.VM.TS1State?.CurrentFamily;
+                var inFamily = family != null && avatar.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family.ChunkID;
+                var isVisitor = !inFamily && avatar.GetPersonData(VMPersonDataVariable.PersonType) == 1 && avatar.GetPersonData(VMPersonDataVariable.GreetStatus) < 2;
                 //avatar.ObjectID != Context.VM.GetGlobalValue(3);
                 var debugTrees = false;
 

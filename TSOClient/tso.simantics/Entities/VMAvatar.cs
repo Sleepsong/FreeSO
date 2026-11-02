@@ -941,6 +941,10 @@ namespace FSO.SimAntics
                         if (suit is ulong) BodyOutfit = new VMOutfitReference((ulong)suit);
                     }
                     break;
+                case VMPersonDataVariable.PersonType:
+                    if (Engine.VMTravelLog.Enabled && value != PersonData[(ushort)variable] && Thread != null)
+                        Engine.VMTravelLog.PersonTypeChanged(this, PersonData[(ushort)variable], value);
+                    break;
                 case VMPersonDataVariable.Gender:
                     if (UseWorld)
                     {

@@ -406,6 +406,25 @@ namespace FSO.SimAntics.Engine
             catch (Exception) { }
         }
 
+        /// <summary>The thread the scheduler is running (for notes made where no frame is at hand).</summary>
+        public static VMThread Running;
+
+        /// <summary>A Sim's person type changed (1 is a visitor): which script did it.</summary>
+        public static void PersonTypeChanged(VMEntity sim, short from, short to)
+        {
+            try
+            {
+                //only the family being played: every townie gets one when created
+                var family = (sim as VMAvatar)?.Thread?.Context?.VM?.TS1State?.CurrentFamily;
+                if (family == null || ((VMAvatar)sim).GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != family.ChunkID) return;
+                var thread = Running;
+                var top = thread?.Stack.LastOrDefault();
+                Write($"{Name(sim)}: person type {from} -> {to}" +
+                    (top == null ? " (not from a script)" : $", by {Who(thread)} in {Routine(top)} of {top.CodeOwner?.OBJ?.ChunkLabel ?? "?"}"));
+            }
+            catch (Exception) { }
+        }
+
         /// <summary>For other notes: which followed script was running, if any.</summary>
         public static string Context()
         {

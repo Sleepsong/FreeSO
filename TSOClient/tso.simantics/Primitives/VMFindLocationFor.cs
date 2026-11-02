@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using FSO.SimAntics.Engine;
 using FSO.Files.Utils;
 using FSO.SimAntics.Model;
@@ -89,16 +90,65 @@ namespace FSO.SimAntics.Primitives
         private static bool Try(VMEntity obj, LotTilePos pos, Direction dir, VMContext context, VMPlaceRequestFlags flags, List<string> attempts)
         {
             var placed = obj.SetPosition(pos, dir, context, flags);
-            attempts?.Add($"({pos.TileX},{pos.TileY},{pos.Level}) {dir}: {placed.Status}" + ((placed.Object != null && placed.Status != VMPlacementError.Success) ? $" [{placed.Object}]" : ""));
+            attempts?.Add($"({pos.x / 16f:0.##},{pos.y / 16f:0.##},{pos.Level}) {dir}: {placed.Status}" + ((placed.Object != null && placed.Status != VMPlacementError.Success) ? $" [{placed.Object}]" : ""));
             if (attempts != null && placed.Object != null && placed.Status != VMPlacementError.Success) VMTravelLog.NoteObstacle(placed.Object);
             return placed.Status == VMPlacementError.Success;
         }
 
         public static bool FindLocationVector(VMEntity obj, VMEntity refObj, VMContext context, int dir, VMPlaceRequestFlags flags, bool preferNonEmpty = false, List<string> attempts = null)
         {
+            if (SearchVector(obj, refObj, context, dir, flags, preferNonEmpty, attempts, new LotTilePos())) return true;
+
+            //Fallback: an object several tiles wide sits to one side of the vector (its parts are offset from its lead
+            //tile), so on a lane exactly its width it hits whatever lines the lane. Studio Town's cab home (3 tiles wide,
+            //placed along the car portal's facing) hit the spa tubs on one side of the drive every time and deleted
+            //itself. Try again with the object centred on the vector, then shifted a tile either way. Placements that
+            //already worked are unchanged: this only runs when every spot above was refused.
+            LotTilePos step = DirectionVectors[dir];
+            var lateral = new LotTilePos(step.y, (short)-step.x, 0);
+            var centre = LateralCentre(obj, (Direction)(1 << dir), lateral);
+            var shifts = new List<int> { -centre, -16, 16 }.Where(x => x != 0).Distinct().ToList();
+            foreach (var shift in shifts)
+            {
+                attempts?.Add($"(shifted {shift / 16f:0.##} tiles sideways)");
+                var offset = new LotTilePos((short)(lateral.x / 16 * shift), (short)(lateral.y / 16 * shift), 0);
+                if (SearchVector(obj, refObj, context, dir, flags, preferNonEmpty, attempts, offset)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Where the middle of a multitile object's parts is across the vector, from its lead tile (in 1/16 tiles).</summary>
+        private static int LateralCentre(VMEntity obj, Direction direction, LotTilePos lateral)
+        {
+            var group = obj.MultitileGroup;
+            if (group == null || group.Objects.Count < 2 || (lateral.x == 0 && lateral.y == 0)) return 0;
+            int dir = 0;
+            switch (direction)
+            {
+                case Direction.EAST: dir = 2; break;
+                case Direction.SOUTH: dir = 4; break;
+                case Direction.WEST: dir = 6; break;
+            }
+            var rotation = Microsoft.Xna.Framework.Matrix.CreateRotationZ((float)(dir * Math.PI / 4.0));
+            var lead = group.Offsets[Math.Max(0, group.Objects.IndexOf(group.BaseObject))];
+            var lengthSquared = lateral.x * lateral.x + lateral.y * lateral.y;
+            float min = float.MaxValue, max = float.MinValue;
+            foreach (var offset in group.Offsets)
+            {
+                var off = Microsoft.Xna.Framework.Vector3.Transform(new Microsoft.Xna.Framework.Vector3(offset.x - lead.x, offset.y - lead.y, 0), rotation);
+                var across = (off.X * lateral.x + off.Y * lateral.y) * 16f / lengthSquared;
+                min = Math.Min(min, across);
+                max = Math.Max(max, across);
+            }
+            return (int)Math.Round((min + max) / 2f);
+        }
+
+        private static bool SearchVector(VMEntity obj, VMEntity refObj, VMContext context, int dir, VMPlaceRequestFlags flags, bool preferNonEmpty, List<string> attempts, LotTilePos offset)
+        {
             LotTilePos step = DirectionVectors[dir];
             var dirf = (Direction)(1 << (dir));
             var deferred = new List<LotTilePos>();
+            var origin = new LotTilePos(refObj.Position) + offset;
 
             Func<LotTilePos, bool> evaluate = (LotTilePos pos) =>
             {
@@ -115,10 +165,10 @@ namespace FSO.SimAntics.Primitives
 
             for (int i = 0; i < 32; i++)
             {
-                if (evaluate(new LotTilePos(refObj.Position) + step * (i / 2))) return true;
+                if (evaluate(origin + step * (i / 2))) return true;
                 if (i%2 != 0)
                 {
-                    if (evaluate(new LotTilePos(refObj.Position) - step * (i / 2))) return true;
+                    if (evaluate(origin - step * (i / 2))) return true;
                 }
             }
 
