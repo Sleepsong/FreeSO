@@ -24,7 +24,9 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (callee == null) return false;
             if (callee is VMGameObject && ((VMGameObject)callee).Disabled > 0) return false;
             if ((caller.Thread?.Queue?.Count ?? 0) >= VMThread.MAX_USER_ACTIONS) return false;
+            var queued = VMTravelLog.Enabled ? caller.Thread?.Queue?.ToList() : null;
             callee.PushUserInteraction(Interaction, caller, vm.Context, Global, new short[] { Param0, 0, 0, 0 });
+            if (queued != null) VMTravelLog.Follow(vm, caller, callee, caller.Thread.Queue.Where(x => !queued.Contains(x)));
 
             return true;
         }

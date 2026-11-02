@@ -26,6 +26,8 @@ namespace FSO.SimAntics.Engine
 
         public VMContext Context;
         private VMEntity Entity;
+        /// <summary>The object this thread runs for, for the travel log.</summary>
+        internal VMEntity Owner => Entity;
 
         public VMThreadBreakMode ThreadBreak = VMThreadBreakMode.Active;
         public string ThreadBreakString;
@@ -442,8 +444,33 @@ namespace FSO.SimAntics.Engine
             var currentFrame = Stack.LastOrDefault();
             if (currentFrame == null) return;
 
-            if (currentFrame is VMRoutingFrame) HandleResult(currentFrame, null, ((VMRoutingFrame)currentFrame).Tick());
+            if (currentFrame is VMRoutingFrame)
+            {
+                var routed = ((VMRoutingFrame)currentFrame).Tick();
+                if (VMTravelLog.Enabled && routed != VMPrimitiveExitCode.CONTINUE_NEXT_TICK && routed != VMPrimitiveExitCode.CONTINUE && TraceThis(currentFrame))
+                    VMTravelLog.Routed(this, (VMRoutingFrame)currentFrame, routed);
+                HandleResult(currentFrame, null, routed);
+            }
             else if (currentFrame is VMDirectControlFrame) HandleResult(currentFrame, null, ((VMDirectControlFrame)currentFrame).Tick());
+            else if (VMTravelLog.Enabled && TraceThis(currentFrame))
+            {
+                //the travel log follows this script step by step
+                VMInstruction instruction;
+                var ip = currentFrame.InstructionPointer;
+                var outer = VMTravelLog.Following;
+                VMTravelLog.Following = this;
+                VMPrimitiveExitCode result;
+                try
+                {
+                    result = currentFrame.Routine.Execute(currentFrame, out instruction);
+                }
+                finally
+                {
+                    VMTravelLog.Following = outer;
+                }
+                VMTravelLog.Step(this, currentFrame, ip, instruction, result);
+                HandleResult(currentFrame, instruction, result);
+            }
             else
             {
                 VMInstruction instruction;
@@ -702,8 +729,19 @@ namespace FSO.SimAntics.Engine
             Context.VM.BreakpointHit(Entity);
         }
 
+        /// <summary>Whether the travel log is following this frame's script (see <see cref="VMTravelLog"/>).</summary>
+        internal bool TraceThis(VMStackFrame frame)
+        {
+            if (IsCheck) return VMTravelLog.TracingChecks;
+            if (Entity.TraceBudget > 0) return true;
+            return frame.ActionTree && Queue.Count > 0 && ActiveQueueBlock >= 0 && ActiveQueueBlock < Queue.Count
+                && Queue[ActiveQueueBlock].TraceLines > 0;
+        }
+
         public void Pop(VMPrimitiveExitCode result)
         {
+            if (VMTravelLog.Enabled && Stack.Count > 1 && TraceThis(Stack[Stack.Count - 1]))
+                VMTravelLog.Returned(this, Stack[Stack.Count - 1], result);
             var discardResult = Stack[Stack.Count - 1].SpecialResult;
             var contextSwitch = (Stack.Count > 1) && Stack.LastOrDefault().ActionTree != Stack[Stack.Count - 2].ActionTree;
             Stack.RemoveAt(Stack.Count - 1);
@@ -756,6 +794,7 @@ namespace FSO.SimAntics.Engine
         public void EnqueueAction(VMQueuedAction invocation)
         {
             invocation.UID = ActionUID++;
+            if (VMTravelLog.Following != null && !IsCheck) VMTravelLog.Queued(Entity, invocation);
             QueueDirty = true;
             if (!IsCheck && (invocation.Flags & TTABFlags.RunImmediately) > 0)
             {

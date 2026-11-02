@@ -37,6 +37,9 @@ namespace FSO.SimAntics.Engine
         public TTABFlags Flags;
         public TSOFlags Flags2 = (TSOFlags)0x1f;
 
+        /// <summary>Lines of script trace this interaction may still write to the travel log (0: not traced). Not saved.</summary>
+        public int TraceLines;
+
         public ushort UID; //a wraparound ID that is just here so that a specific interaction can be reliably "cancelled" by a client.
 
         public VMActionCallback Callback;
