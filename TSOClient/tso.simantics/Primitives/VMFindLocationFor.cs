@@ -30,11 +30,21 @@ namespace FSO.SimAntics.Primitives
             var flags = VMPlaceRequestFlags.AcceptSlots;
             if (operand.UserEditableTilesOnly) flags |= VMPlaceRequestFlags.UserBuildableLimit;
 
+            //the travel log records every spot tried, and why it was refused, for a script it's following
+            var attempts = (VMTravelLog.Enabled && VMTravelLog.Following == context.Thread) ? new List<string>() : null;
+            var result = Find(context, operand, obj, refObj, flags, attempts);
+            if (attempts != null) VMTravelLog.Placement(context, obj, refObj, operand.Mode, flags, result, attempts);
+            return result;
+        }
+
+        private VMPrimitiveExitCode Find(VMStackFrame context, VMFindLocationForOperand operand, VMEntity obj, VMEntity refObj, VMPlaceRequestFlags flags, List<string> attempts)
+        {
+
             switch (operand.Mode)
             {
                 case 0:
                     //default
-                    if (FindLocationFor(obj, refObj, context.VM.Context, flags, operand.PreferNonEmpty)) return VMPrimitiveExitCode.GOTO_TRUE;
+                    if (FindLocationFor(obj, refObj, context.VM.Context, flags, operand.PreferNonEmpty, attempts)) return VMPrimitiveExitCode.GOTO_TRUE;
                     else return VMPrimitiveExitCode.GOTO_FALSE;
                 case 1:
                     //out of world
@@ -53,7 +63,7 @@ namespace FSO.SimAntics.Primitives
                     //along object vector
                     var intDir = (int)Math.Round(Math.Log((double)refObj.Direction, 2));
                     if (operand.Mode == 4) intDir = (intDir + 2) % 8; //lateral to object vector
-                    if (FindLocationVector(obj, refObj, context.VM.Context, intDir, flags, operand.PreferNonEmpty)) return VMPrimitiveExitCode.GOTO_TRUE;
+                    if (FindLocationVector(obj, refObj, context.VM.Context, intDir, flags, operand.PreferNonEmpty, attempts)) return VMPrimitiveExitCode.GOTO_TRUE;
                     else return VMPrimitiveExitCode.GOTO_FALSE;
                 case 5:
                     //random
@@ -75,7 +85,15 @@ namespace FSO.SimAntics.Primitives
             return (context.ObjectQueries.GetObjectsAt(pos)?.Count ?? 0) > 0;
         }
 
-        public static bool FindLocationVector(VMEntity obj, VMEntity refObj, VMContext context, int dir, VMPlaceRequestFlags flags, bool preferNonEmpty = false)
+        /// <summary>Places the object, noting the outcome for the travel log when it's following the script.</summary>
+        private static bool Try(VMEntity obj, LotTilePos pos, Direction dir, VMContext context, VMPlaceRequestFlags flags, List<string> attempts)
+        {
+            var placed = obj.SetPosition(pos, dir, context, flags);
+            attempts?.Add($"({pos.TileX},{pos.TileY},{pos.Level}) {dir}: {placed.Status}" + ((placed.Object != null && placed.Status != VMPlacementError.Success) ? $" [{placed.Object}]" : ""));
+            return placed.Status == VMPlacementError.Success;
+        }
+
+        public static bool FindLocationVector(VMEntity obj, VMEntity refObj, VMContext context, int dir, VMPlaceRequestFlags flags, bool preferNonEmpty = false, List<string> attempts = null)
         {
             LotTilePos step = DirectionVectors[dir];
             var dirf = (Direction)(1 << (dir));
@@ -90,7 +108,7 @@ namespace FSO.SimAntics.Primitives
                 }
                 else
                 {
-                    return obj.SetPosition(pos, dirf, context, flags).Status == VMPlacementError.Success;
+                    return Try(obj, pos, dirf, context, flags, attempts);
                 }
             };
 
@@ -105,12 +123,12 @@ namespace FSO.SimAntics.Primitives
 
             foreach (var tile in deferred)
             {
-                if (obj.SetPosition(tile, dirf, context, flags).Status == VMPlacementError.Success) return true;
+                if (Try(obj, tile, dirf, context, flags, attempts)) return true;
             }
             return false;
         }
 
-        public static bool FindLocationFor(VMEntity obj, VMEntity refObj, VMContext context, VMPlaceRequestFlags flags, bool preferNonEmpty = false)
+        public static bool FindLocationFor(VMEntity obj, VMEntity refObj, VMContext context, VMPlaceRequestFlags flags, bool preferNonEmpty = false, List<string> attempts = null)
         {
             var deferred = new List<Tuple<LotTilePos, Direction>>();
 
@@ -123,7 +141,7 @@ namespace FSO.SimAntics.Primitives
                 }
                 else
                 {
-                    return obj.SetPosition(pos, dir, context, flags).Status == VMPlacementError.Success;
+                    return Try(obj, pos, dir, context, flags, attempts);
                 }
             };
 
@@ -165,7 +183,7 @@ namespace FSO.SimAntics.Primitives
 
             foreach (var tile in deferred)
             {
-                if (obj.SetPosition(tile.Item1, tile.Item2, context, flags).Status == VMPlacementError.Success) return true;
+                if (Try(obj, tile.Item1, tile.Item2, context, flags, attempts)) return true;
             }
             return false;
         }

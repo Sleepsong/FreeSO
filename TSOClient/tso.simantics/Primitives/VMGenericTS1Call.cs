@@ -160,12 +160,16 @@ namespace FSO.SimAntics.Primitives
 
                     var crossDataDT = Content.Content.Get().Neighborhood.GameState;
 
+                    //the family is made this lot's family before its Sim is created: a Sim created for the lot's family
+                    //is family (person type 0), anyone else a visitor (1, see VMAvatar.InheritNeighbor). Activating it
+                    //after left the travelling Sim a visitor, and interactions that don't allow visitors were left out
+                    //of their menus (Magic Town's hole: Go Home, Jump In, Go Elsewhere).
+                    crossDataDT.ActiveFamily.SelectOneMember(crossDataDT.DowntownSimGUID);
+                    context.VM.TS1State.ActivateFamily(context.VM, crossDataDT.ActiveFamily);
                     var control = context.VM.Context.CreateObjectInstance(crossDataDT.DowntownSimGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
                     ((VMAvatar)control).AvatarState.Permissions = Model.TSOPlatform.VMTSOAvatarPermissions.Owner;
                     context.VM.SetGlobalValue(3, control.ObjectID);
                     context.VM.SendCommand(new VMNetChangeControlCmd() { TargetID = control.ObjectID });
-                    crossDataDT.ActiveFamily.SelectOneMember(crossDataDT.DowntownSimGUID);
-                    context.VM.TS1State.ActivateFamily(context.VM, crossDataDT.ActiveFamily);
 
                     context.Thread.TempRegisters[0] = context.VM.GetGlobalValue(3);
                     if (VM.UseWorld) context.VM.Context.World.CenterTo((AvatarComponent)(context.VM.GetObjectById(context.VM.GetGlobalValue(3))?.WorldUI));
@@ -256,12 +260,13 @@ namespace FSO.SimAntics.Primitives
                     }
                     else
                     {
+                        //family first, so the Sim isn't created as a visitor (see BuildTheDowntownSim above)
+                        crossData2.ActiveFamily.SelectOneMember(crossData2.DowntownSimGUID);
+                        context.VM.TS1State.ActivateFamily(context.VM, crossData2.ActiveFamily);
                         var control2 = context.VM.Context.CreateObjectInstance(crossData2.DowntownSimGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
                         ((VMAvatar)control2).AvatarState.Permissions = Model.TSOPlatform.VMTSOAvatarPermissions.Owner;
                         context.VM.SetGlobalValue(3, control2.ObjectID);
                         context.VM.SendCommand(new VMNetChangeControlCmd() { TargetID = control2.ObjectID });
-                        crossData2.ActiveFamily.SelectOneMember(crossData2.DowntownSimGUID);
-                        context.VM.TS1State.ActivateFamily(context.VM, crossData2.ActiveFamily);
 
                         context.Thread.TempRegisters[0] = context.VM.GetGlobalValue(3);
                     }

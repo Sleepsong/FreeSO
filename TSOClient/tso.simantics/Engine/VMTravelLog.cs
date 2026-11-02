@@ -460,6 +460,33 @@ namespace FSO.SimAntics.Engine
             catch (Exception) { }
         }
 
+        /// <summary>A Find Location For in a followed script: where it looked, and why each spot was refused.</summary>
+        public static void Placement(VMStackFrame frame, VMEntity obj, VMEntity refObj, byte mode, VMPlaceRequestFlags flags,
+            VMPrimitiveExitCode result, List<string> attempts)
+        {
+            try
+            {
+                var arch = frame.VM.Context.Architecture;
+                var output = new StringBuilder($"{Who(frame.Thread)} find location for {Name(obj)} (mode {mode}, flags {flags})" +
+                    $" near {Name(refObj)} (object {refObj?.ObjectID}) at {Tile(refObj)} facing {refObj?.Direction}" +
+                    $" on a {arch?.Width}x{arch?.Height} lot -> {result}; {attempts.Count} spots tried");
+                if (obj?.MultitileGroup != null)
+                    output.Append($"\n  {Name(obj)} is {obj.MultitileGroup.Objects.Count} tiles; it was at {Tile(obj)}");
+                var reasons = attempts.Select(x => x.Substring(x.IndexOf(": ") + 2)).GroupBy(x => x).OrderByDescending(x => x.Count());
+                output.Append("\n  refused: " + string.Join(", ", reasons.Select(x => $"{x.Count()}x {x.Key}")));
+                foreach (var attempt in attempts.Take(48)) output.Append("\n    " + attempt);
+                Write(output.ToString());
+            }
+            catch (Exception) { }
+        }
+
+        private static string Tile(VMEntity entity)
+        {
+            if (entity == null) return "?";
+            var pos = entity.Position;
+            return (pos == FSO.LotView.Model.LotTilePos.OUT_OF_WORLD) ? "out of the world" : $"({pos.TileX},{pos.TileY},{pos.Level})";
+        }
+
         private static readonly Dictionary<string, int> Steps = new Dictionary<string, int>();
 
         /// <summary>Counts a followed step against its budget, and skips loops after a couple of rounds.</summary>
@@ -467,7 +494,9 @@ namespace FSO.SimAntics.Engine
         {
             string scope;
             if (thread.IsCheck) scope = "c" + CheckRun;
-            else if (thread.Owner.TraceBudget > 0 && !(frame.ActionTree && thread.ActiveAction?.TraceLines > 0)) scope = "o" + thread.Owner.ObjectID;
+            //(per object instance: a new cab can reuse an old one's object ID)
+            else if (thread.Owner.TraceBudget > 0 && !(frame.ActionTree && thread.ActiveAction?.TraceLines > 0))
+                scope = "o" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(thread.Owner);
             else scope = "a" + thread.Owner.ObjectID + ":" + thread.ActiveAction?.UID;
 
             lock (Lock)
