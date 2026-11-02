@@ -15,18 +15,24 @@ namespace FSO.SimAntics.Engine
         private static string[] valid = {
             "Object", "Me", "TempXL:", "Temp:", "$", "Attribute:", "DynamicStringLocal:", "Local:", "TimeLocal:", "NameLocal:",
             "FixedLocal:", "DynamicObjectName", "MoneyXL:", "JobOffer:", "Job:", "JobDesc:", "Param:", "Neighbor", "\r\n", "ListObject",
-            "CatalogLocal:", "DateLocal:", "ObjectLocal:", "\\n"
+            "CatalogLocal:", "DateLocal:", "ObjectLocal:", "\\n", "Family"
         };
 
         public static void ShowDialog(VMStackFrame context, VMDialogOperand operand, STR source)
         {
+            var message = source.GetString(Math.Max(0, operand.MessageStringID - 1));
+            //a $Neighbor message holds a neighbour id in the stack object, not an object id
+            var neighbor = (context.VM.TS1 && message?.Contains("$Neighbor") == true)
+                ? Content.Content.Get().Neighborhood.GetNeighborByID(context.StackObjectID) : null;
+
             VMDialogInfo info = new VMDialogInfo
             {
                 Block = (operand.Flags & VMDialogFlags.Continue) == 0,
                 Caller = context.Caller,
-                Icon = context.StackObject,
+                Icon = (neighbor == null) ? context.StackObject : null,
+                IconNeighborGUID = neighbor?.GUID ?? 0,
                 Operand = operand,
-                Message = ParseDialogString(context, source.GetString(Math.Max(0, operand.MessageStringID - 1)), source),
+                Message = ParseDialogString(context, message, source),
                 Title = (operand.TitleStringID == 0) ? "" : ParseDialogString(context, source.GetString(operand.TitleStringID - 1), source),
                 IconName = (operand.IconNameStringID == 0) ? "" : ParseDialogString(context, source.GetString(operand.IconNameStringID - 1), source),
 
@@ -254,6 +260,12 @@ namespace FSO.SimAntics.Engine
                                     var gobj = Content.Content.Get().WorldObjects.Get(guid);
                                     if (gobj == null) output.Append("Unknown");
                                     else output.Append(gobj.Resource.Get<FSO.Files.Formats.IFF.Chunks.CTSS>(gobj.OBJ.CatalogStringsID)?.GetString(0) ?? "Unknown");
+                                    break;
+                                case "Family":
+                                    //family name of the neighbour in stack object id
+                                    if (!context.VM.TS1) break;
+                                    var famNum = Content.Content.Get().Neighborhood.GetNeighborByID(context.StackObjectID)?.PersonData?.ElementAt((int)VMPersonDataVariable.TS1FamilyNumber);
+                                    if (famNum != null) output.Append(Content.Content.Get().Neighborhood.GetFamilyString((ushort)famNum.Value)?.GetString(0));
                                     break;
                                 case "ListObject":
                                     output.Append(new string(context.StackObject.MyList.Select(x => (char)x).ToArray()));
