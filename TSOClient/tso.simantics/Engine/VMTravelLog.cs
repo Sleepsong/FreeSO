@@ -1,4 +1,4 @@
-using FSO.Files.Formats.IFF.Chunks;
+﻿using FSO.Files.Formats.IFF.Chunks;
 using FSO.SimAntics.Model;
 using FSO.SimAntics.Primitives;
 using System;
@@ -460,7 +460,21 @@ namespace FSO.SimAntics.Engine
                 var locals = (frame.Locals != null && frame.Locals.Length > 0) ? $" locals {string.Join(",", frame.Locals.Take(8))}" : "";
                 Write($"{Who(thread)} '{RoutineName(frame.Routine)}' 0x{frame.Routine?.ID:X4} [{ip}] {what}" +
                     $" | temps {temps[0]},{temps[1]},{temps[2]},{temps[3]}{locals}" +
-                    ((ip == 0 && frame.Args != null) ? $" | args {string.Join(",", frame.Args.Take(4))}" : ""));
+                    ((ip == 0 && frame.Args != null) ? $" | args {string.Join(",", frame.Args.Take(4))}" : "") +
+                    DisassembleOnce(frame)); //each routine a followed script runs, once: e.g. a car's "Home Main" and "drive away"
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>A followed object's Snap failed: which slot, where it would have gone, and what was in the way.</summary>
+        public static void SnapFailed(VMStackFrame frame, VMEntity obj, FSO.Files.Formats.IFF.Chunks.SLOTItem slot, string why)
+        {
+            try
+            {
+                var slotText = (slot == null) ? "" :
+                    $"; slot offset ({slot.Offset.X},{slot.Offset.Y},{slot.Offset.Z}), flags {slot.Rsflags}, proximity {slot.MinProximity}-{slot.MaxProximity}" +
+                    $" (optimal {slot.OptimalProximity}), facing {slot.Facing}, target slot {slot.SnapTargetSlot}";
+                Write($"{Who(frame.Thread)} snap of {Name(obj)} at {Tile(obj)} facing {obj?.Direction} failed: {why}{slotText}");
             }
             catch (Exception) { }
         }
@@ -499,9 +513,22 @@ namespace FSO.SimAntics.Engine
                     $" on a {arch?.Width}x{arch?.Height} lot -> {result}; {attempts.Count} spots tried");
                 if (obj?.MultitileGroup != null)
                     output.Append($"\n  {Name(obj)} is {obj.MultitileGroup.Objects.Count} tiles; it was at {Tile(obj)}");
-                var reasons = attempts.Select(x => x.Substring(x.IndexOf(": ") + 2)).GroupBy(x => x).OrderByDescending(x => x.Count());
+                var tries = attempts.Where(x => !x.StartsWith("note: ")).ToList();
+                var reasons = tries.Select(x => x.Substring(x.IndexOf(": ") + 2)).GroupBy(x => x).OrderByDescending(x => x.Count());
                 output.Append("\n  refused: " + string.Join(", ", reasons.Select(x => $"{x.Count()}x {x.Key}")));
-                foreach (var attempt in attempts.Take(48)) output.Append("\n    " + attempt);
+                //the first spots tried, the last few (where it ended up), and every note on the way
+                var skipped = false;
+                for (int i = 0; i < attempts.Count; i++)
+                {
+                    var attempt = attempts[i];
+                    if (attempt.StartsWith("note: ") || i < 48 || i >= attempts.Count - 8)
+                    {
+                        if (skipped) output.Append("\n    ...");
+                        skipped = false;
+                        output.Append("\n    " + attempt);
+                    }
+                    else skipped = true;
+                }
 
                 //what the things in the way are doing (a car that should have driven off, say)
                 List<VMEntity> obstacles;
@@ -529,7 +556,7 @@ namespace FSO.SimAntics.Engine
                 var far = obj != null && refObj != null && obj.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD &&
                     (Math.Abs(obj.Position.TileX - refObj.Position.TileX) + Math.Abs(obj.Position.TileY - refObj.Position.TileY)) > 3;
                 if (refObj != null && (result != VMPrimitiveExitCode.GOTO_TRUE || far))
-                    output.Append(Map(frame.VM, refObj, obj));
+                    output.Append(Map(frame.VM, refObj, obj) + HiddenObjects(frame.VM));
                 Write(output.ToString());
             }
             catch (Exception) { }
@@ -558,9 +585,8 @@ namespace FSO.SimAntics.Engine
         {
             var arch = vm.Context.Architecture;
             var level = refObj.Position.Level;
-            int cx = refObj.Position.TileX, cy = refObj.Position.TileY, radius = 16;
-            int x0 = Math.Max(0, cx - radius), x1 = Math.Min(arch.Width - 1, cx + radius);
-            int y0 = Math.Max(0, cy - radius), y1 = Math.Min(arch.Height - 1, cy + radius);
+            int cx = refObj.Position.TileX, cy = refObj.Position.TileY;
+            int x0 = 0, x1 = arch.Width - 1, y0 = 0, y1 = arch.Height - 1; //the whole lot: a street can be well away from its portal
             var buildable = arch.BuildableArea;
             var mine = placed?.MultitileGroup;
             var patterns = new Dictionary<ushort, char>();
@@ -602,6 +628,36 @@ namespace FSO.SimAntics.Engine
                 $"\n{header}" + objects +
                 "\n  floor patterns (_ none): " + string.Join(", ", patterns.Where(p => p.Key != 0).Select(p => $"{p.Value}={p.Key}")) +
                 $"\n{header}" + floors;
+        }
+
+        /// <summary>
+        /// The lot's portals, markers and controllers (TS1 names hidden objects with a leading *), once per lot: which
+        /// one a car or a Sim uses, and where it is.
+        /// </summary>
+        private static string HiddenObjects(VM vm)
+        {
+            var house = vm.GetGlobalValue(10);
+            lock (Lock)
+            {
+                var key = "hidden:" + house;
+                if (Seen.ContainsKey(key)) return "";
+                Seen[key] = 1;
+            }
+            var hidden = vm.Entities.Where(e => !(e is VMAvatar) && (e.MultitileGroup?.BaseObject ?? e) == e)
+                .Where(e =>
+                {
+                    var name = Name(e);
+                    return name.StartsWith("*") || name.Contains("Portal") || name.Contains("Marker") || name.Contains("Stop");
+                })
+                .OrderBy(e => e.ObjectID).Take(120).ToList();
+            var output = new StringBuilder($"\n  hidden objects on lot {house} (portals, markers, controllers):");
+            foreach (var e in hidden)
+            {
+                var pos = e.Position;
+                var where = (pos == FSO.LotView.Model.LotTilePos.OUT_OF_WORLD) ? "out of the world" : $"({pos.x / 16f:0.##},{pos.y / 16f:0.##},{pos.Level})";
+                output.Append($"\n    {Name(e)} (object {e.ObjectID}, GUID 0x{e.Object?.OBJ?.GUID:X8}) at {where} facing {e.Direction}");
+            }
+            return output.ToString();
         }
 
         private static string Tile(VMEntity entity)
