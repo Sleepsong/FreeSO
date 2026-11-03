@@ -59,8 +59,10 @@ namespace FSO.SimAntics.Primitives
 
             var neighbourhood = Content.Content.Get().Neighborhood;
             var inTarget = (operand.UseObjectInTemp4) ? context.VM.GetObjectById(context.Thread.TempRegisters[4]) : context.Caller;
-            if (inTarget is VMGameObject) { }
-            var target = (VMAvatar)(inTarget);
+            // the object in Temp 4 can be gone (e.g. a Sim who has left the lot) or not a person;
+            // neither has an inventory, so the check fails rather than throwing.
+            var target = inTarget as VMAvatar;
+            if (target == null) return VMPrimitiveExitCode.GOTO_FALSE;
             var neighbour = target.GetPersonData(Model.VMPersonDataVariable.NeighborId);
             var inventory = neighbourhood.GetInventoryByNID(neighbour);
             var count = (operand.CountInTemp) ? context.Thread.TempRegisters[0] : 1;

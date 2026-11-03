@@ -30,6 +30,7 @@ namespace FSO.HIT
         private Patch Patch; //sound id
         public bool HasSetLoop;
         public bool LoopDefined;
+        public bool LoopSetByOwner; //the game's Play Sound call chose whether this loops (Loop)
         public bool ThreadDead;
 
         public bool Interruptable

@@ -45,6 +45,7 @@ namespace FSO.SimAntics.Primitives
                         if (!((HITThread)thread).LoopDefined || fwav.Name == "piano_play")
                         {
                             ((HITThread)thread).Loop = entry.Loop;
+                            ((HITThread)thread).LoopSetByOwner = true;
                             ((HITThread)thread).HasSetLoop = fwav.Name == "piano_play";
                         }
                         owner.SubmitHITVars((HITThread)thread);
