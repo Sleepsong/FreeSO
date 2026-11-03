@@ -517,6 +517,12 @@ namespace FSO.SimAntics.Engine
                 {
                     output.Append($"\n  in the way: {Name(lead)} at {Tile(lead)} facing {lead.Direction}");
                     DumpEntity(output, lead, null);
+                    //a car in the way should have driven off: follow its scripts from now on, to see why it hasn't
+                    if ((lead.MultitileGroup?.Objects.Count ?? 1) >= 12 && lead.TraceBudget <= 0)
+                    {
+                        lead.TraceBudget = ObjectTraceLines;
+                        output.Append($"\n    (following its scripts from now on)");
+                    }
                 }
 
                 //a car that couldn't be placed, or was placed well away from its portal: map the ground around it
