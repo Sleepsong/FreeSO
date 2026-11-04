@@ -19,7 +19,7 @@ namespace FSO.Content.Framework
             { ".iff", new string[] { "Downloads/" } },
 
             { ".bcf", new string[] { "Downloads/" } }, //for animations
-            { ".cfp", new string[] { "Downloads/" } }
+            { ".cfp", new string[] { "GameData/Skins/", "Downloads/" } } //custom animations put their .cfp next to the .cmx in Skins, as TS1 reads them
         };
 
         private Dictionary<string, FileProvider<object>> FileProvidersByRegex = new Dictionary<string, FileProvider<object>>();
