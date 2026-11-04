@@ -38,10 +38,14 @@ namespace FSO.Files.HIT
             while (!io.EndOfStream)
             {
                 string line = io.ReadLine();
+                if (string.IsNullOrWhiteSpace(line)) continue;
                 string[] Values = line.Split(' ');
+                if (Values.Length < 2) continue;
 
                 var name = Values[0].ToLowerInvariant();
-                if (!Constants.ContainsKey(name)) Constants.Add(name, Convert.ToInt32(Values[1])); //the repeats are just labels for locations (usually called gotit)
+                int val;
+                if (!int.TryParse(Values[1], out val)) continue;
+                if (!Constants.ContainsKey(name)) Constants.Add(name, val);
             }
 
             io.Close();

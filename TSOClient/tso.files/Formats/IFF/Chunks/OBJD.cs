@@ -395,7 +395,8 @@ namespace FSO.Files.Formats.IFF.Chunks
                 var numFields = 80;
                 if (Version == 138)
                 {
-                    numFields = 95;
+                    //138b only differs by its length: expansion pack objects add the lot type subsorts
+                    numFields = (stream.Length >= 4 + (108 - 2) * 2) ? 108 : 95;
                 }
                 else if (Version == 139)
                 {

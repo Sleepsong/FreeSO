@@ -1259,8 +1259,14 @@ namespace FSO.SimAntics
             base.Load(input);
             AvatarState = (VMIAvatarState)PlatformState;
             Animations = new List<VMAnimationState>();
-            foreach (var anim in input.Animations) Animations.Add(new VMAnimationState(anim));
+            //drop saved animations that no longer load (custom content that's missing or broken), like the animate primitives do
+            foreach (var anim in input.Animations)
+            {
+                var state = new VMAnimationState(anim);
+                if (state.Anim != null) Animations.Add(state);
+            }
             CarryAnimationState = (input.CarryAnimationState == null) ? null : new VMAnimationState(input.CarryAnimationState);
+            if (CarryAnimationState?.Anim == null) CarryAnimationState = null;
 
             Message = input.Message;
 
