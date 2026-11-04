@@ -14,6 +14,7 @@ namespace FSO.SimAntics.Primitives
 {
     public class VMSnap : VMPrimitiveHandler 
     {
+        private static VMPlacementResult LastFailure; //for the travel log: why the last move failed
         private static uint GOTO_GUID = 0x000007C4;
         private static short SHOO_INTERACTION = 3;
 
@@ -62,7 +63,12 @@ namespace FSO.SimAntics.Primitives
                     break;
             }
 
-            if (slot == null) return VMPrimitiveExitCode.GOTO_FALSE;
+            var traced = VMTravelLog.Enabled && VMTravelLog.Following == context.Thread;
+            if (slot == null)
+            {
+                if (traced) VMTravelLog.SnapFailed(context, obj, null, $"no slot {operand.Index} ({operand.Mode})");
+                return VMPrimitiveExitCode.GOTO_FALSE;
+            }
 
             var dirSnap = (slot.Rsflags & SLOTFlags.SnapToDirection) > 0;
 
@@ -72,7 +78,11 @@ namespace FSO.SimAntics.Primitives
                 var locations = parser.FindAvaliableLocations(obj, context.VM.Context, avatar);
                 if (slot.SnapTargetSlot > -1)
                 {
-                    if (!context.StackObject.PlaceInSlot(context.Caller, slot.SnapTargetSlot, true, context.VM.Context)) return VMPrimitiveExitCode.GOTO_FALSE;
+                    if (!context.StackObject.PlaceInSlot(context.Caller, slot.SnapTargetSlot, true, context.VM.Context))
+                    {
+                        if (traced) VMTravelLog.SnapFailed(context, obj, slot, $"couldn't go into slot {slot.SnapTargetSlot}");
+                        return VMPrimitiveExitCode.GOTO_FALSE;
+                    }
                     if (locations.Count > 0) avatar.RadianDirection = ((slot.Rsflags & SLOTFlags.SnapToDirection) > 0) ? locations[0].RadianDirection: avatar.RadianDirection;
                 }
                 else
@@ -90,11 +100,20 @@ namespace FSO.SimAntics.Primitives
                         {
                             //set direction regardless. TS1, experimental, breaks chairs snapping onto avatars. if this were correct, it also needs to be in the false branch.
                             //if (dirSnap) avatar.RadianDirection = locations[0].RadianDirection; 
+                            if (traced)
+                            {
+                                var target = locations[0].Position;
+                                VMTravelLog.SnapFailed(context, avatar, slot, $"can't move to ({target.x / 16f:0.##},{target.y / 16f:0.##},{target.Level}): " +
+                                    $"{LastFailure.Status}{(LastFailure.Object != null ? " [" + LastFailure.Object + " at (" + LastFailure.Object.Position.TileX + "," + LastFailure.Object.Position.TileY + ")]" : "")}");
+                            }
                             return VMPrimitiveExitCode.GOTO_FALSE;
                         }
                     }
                     else
                     {
+                        if (traced) VMTravelLog.SnapFailed(context, avatar, slot, $"no spot for the slot: {parser.FailCode}" +
+                            (parser.Blocker != null ? $" [{parser.Blocker} at ({parser.Blocker.Position.TileX},{parser.Blocker.Position.TileY})]" : "") +
+                            (parser.FailCode == Model.Routing.VMRouteFailCode.NoValidGoals ? " (off the lot, or no spot in range)" : ""));
                         if (parser.FailCode == Model.Routing.VMRouteFailCode.NoValidGoals) avatar.SetValue(VMStackObjectVariable.PrimitiveResult, 2);
                         avatar.SetValue(VMStackObjectVariable.PrimitiveResultID, (parser.Blocker == null) ? (short)0 : parser.Blocker.ObjectID);
                         return VMPrimitiveExitCode.GOTO_FALSE;
@@ -112,6 +131,7 @@ namespace FSO.SimAntics.Primitives
         private bool SetPosition(VMEntity entity, LotTilePos pos, float radDir, bool shooAva, VMContext context)
         {
             var posChange = entity.SetPosition(pos, (Direction)(1 << (int)(Math.Round(DirectionUtils.PosMod(radDir, (float)Math.PI * 2) / (Math.PI/4)) % 8)), context);
+            LastFailure = posChange;
             if (posChange.Status != VMPlacementError.Success)
             {
                 if (shooAva && posChange.Object != null && posChange.Object is VMAvatar)

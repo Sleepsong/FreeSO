@@ -495,6 +495,7 @@ namespace FSO.SimAntics
             AddToObjList(this.Entities, entity);
             if (!entity.GhostImage) Context.ObjectQueries.NewObject(entity);
             ObjectId = NextObjID();
+            if (Engine.VMTravelLog.Following != null) Engine.VMTravelLog.Created(entity);
         }
 
         public static void AddToObjList(List<VMEntity> list, VMEntity entity)
@@ -671,6 +672,9 @@ namespace FSO.SimAntics
 
         public void SignalLotSwitch(uint lotId)
         {
+            if (Engine.VMTravelLog.Enabled)
+                Engine.VMTravelLog.Write($"lot switch requested: lot {(short)lotId}{(((short)lotId == -1) ? " (home)" : "")}" +
+                    (OnRequestLotSwitch == null ? " (nothing is listening!)" : ""));
             OnRequestLotSwitch?.Invoke(lotId);
         }
 

@@ -26,6 +26,8 @@ namespace FSO.SimAntics.Engine
 
         public VMContext Context;
         private VMEntity Entity;
+        /// <summary>The object this thread runs for, for the travel log.</summary>
+        internal VMEntity Owner => Entity;
 
         public VMThreadBreakMode ThreadBreak = VMThreadBreakMode.Active;
         public string ThreadBreakString;
@@ -288,6 +290,7 @@ namespace FSO.SimAntics.Engine
         private bool ResetAfterLoad;
 
         public void Tick(){
+            if (VMTravelLog.Enabled) VMTravelLog.Running = this;
             if (ResetAfterLoad)
             {
                 ResetAfterLoad = false;
@@ -451,8 +454,33 @@ namespace FSO.SimAntics.Engine
             var currentFrame = Stack.LastOrDefault();
             if (currentFrame == null) return;
 
-            if (currentFrame is VMRoutingFrame) HandleResult(currentFrame, null, ((VMRoutingFrame)currentFrame).Tick());
+            if (currentFrame is VMRoutingFrame)
+            {
+                var routed = ((VMRoutingFrame)currentFrame).Tick();
+                if (VMTravelLog.Enabled && routed != VMPrimitiveExitCode.CONTINUE_NEXT_TICK && routed != VMPrimitiveExitCode.CONTINUE && TraceThis(currentFrame))
+                    VMTravelLog.Routed(this, (VMRoutingFrame)currentFrame, routed);
+                HandleResult(currentFrame, null, routed);
+            }
             else if (currentFrame is VMDirectControlFrame) HandleResult(currentFrame, null, ((VMDirectControlFrame)currentFrame).Tick());
+            else if (VMTravelLog.Enabled && TraceThis(currentFrame))
+            {
+                //the travel log follows this script step by step
+                VMInstruction instruction;
+                var ip = currentFrame.InstructionPointer;
+                var outer = VMTravelLog.Following;
+                VMTravelLog.Following = this;
+                VMPrimitiveExitCode result;
+                try
+                {
+                    result = currentFrame.Routine.Execute(currentFrame, out instruction);
+                }
+                finally
+                {
+                    VMTravelLog.Following = outer;
+                }
+                VMTravelLog.Step(this, currentFrame, ip, instruction, result);
+                HandleResult(currentFrame, instruction, result);
+            }
             else
             {
                 VMInstruction instruction;
@@ -711,8 +739,19 @@ namespace FSO.SimAntics.Engine
             Context.VM.BreakpointHit(Entity);
         }
 
+        /// <summary>Whether the travel log is following this frame's script (see <see cref="VMTravelLog"/>).</summary>
+        internal bool TraceThis(VMStackFrame frame)
+        {
+            if (IsCheck) return VMTravelLog.TracingChecks;
+            if (Entity.TraceBudget > 0) return true;
+            return frame.ActionTree && Queue.Count > 0 && ActiveQueueBlock >= 0 && ActiveQueueBlock < Queue.Count
+                && Queue[ActiveQueueBlock].TraceLines > 0;
+        }
+
         public void Pop(VMPrimitiveExitCode result)
         {
+            if (VMTravelLog.Enabled && Stack.Count > 1 && TraceThis(Stack[Stack.Count - 1]))
+                VMTravelLog.Returned(this, Stack[Stack.Count - 1], result);
             var discardResult = Stack[Stack.Count - 1].SpecialResult;
             var contextSwitch = (Stack.Count > 1) && Stack.LastOrDefault().ActionTree != Stack[Stack.Count - 2].ActionTree;
             Stack.RemoveAt(Stack.Count - 1);
@@ -765,6 +804,7 @@ namespace FSO.SimAntics.Engine
         public void EnqueueAction(VMQueuedAction invocation)
         {
             invocation.UID = ActionUID++;
+            if (VMTravelLog.Following != null && !IsCheck) VMTravelLog.Queued(Entity, invocation);
             QueueDirty = true;
             if (!IsCheck && (invocation.Flags & TTABFlags.RunImmediately) > 0)
             {
@@ -905,7 +945,13 @@ namespace FSO.SimAntics.Engine
                 }
                 else if (avatar.IsPet) return null; //not allowed
 
-                var isVisitor = avatar.GetPersonData(VMPersonDataVariable.PersonType) == 1 && avatar.GetPersonData(VMPersonDataVariable.GreetStatus) < 2;
+                //a Sim of the family being played is never a visitor, wherever they are. Away from home a script can mark
+                //them person type 1 (Makin' Magic's lots do, after the hole and ped marker set greet status 1), and the
+                //interactions meant for them don't allow visitors: Magic Town's hole has Jump In, Go Home and Go
+                //Elsewhere, and a Sim who came through it couldn't get home.
+                var family = Context.VM.TS1State?.CurrentFamily;
+                var inFamily = family != null && avatar.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family.ChunkID;
+                var isVisitor = !inFamily && avatar.GetPersonData(VMPersonDataVariable.PersonType) == 1 && avatar.GetPersonData(VMPersonDataVariable.GreetStatus) < 2;
                 //avatar.ObjectID != Context.VM.GetGlobalValue(3);
                 var debugTrees = false;
 

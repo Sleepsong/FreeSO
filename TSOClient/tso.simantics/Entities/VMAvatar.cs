@@ -963,6 +963,10 @@ namespace FSO.SimAntics
                         if (suit is ulong) BodyOutfit = new VMOutfitReference((ulong)suit);
                     }
                     break;
+                case VMPersonDataVariable.PersonType:
+                    if (Engine.VMTravelLog.Enabled && value != PersonData[(ushort)variable] && Thread != null)
+                        Engine.VMTravelLog.PersonTypeChanged(this, PersonData[(ushort)variable], value);
+                    break;
                 case VMPersonDataVariable.Gender:
                     if (UseWorld)
                     {
@@ -993,7 +997,12 @@ namespace FSO.SimAntics
             }
             SetPersonData(VMPersonDataVariable.Gender, lastGender); //fixes cats switching to children suddenly
             SetPersonData(VMPersonDataVariable.NeighborId, neigh.NeighbourID);
-            if (lastPersonType == 0) SetPersonData(VMPersonDataVariable.PersonType, (short)((GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == current?.ChunkID) ? 0 : 1));
+            //a member of the lot's family is family (0), whatever the Sim's init tree set: it runs before this, so
+            //"keep what was set" left a travelling Sim a visitor (1) on Magic Town's lots, and TS1's visitor rule
+            //then left out the interactions that don't allow visitors (the hole's Go Home, Jump In, Go Elsewhere).
+            var inFamily = current != null && GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == current.ChunkID;
+            if (inFamily) SetPersonData(VMPersonDataVariable.PersonType, 0);
+            else if (lastPersonType == 0) SetPersonData(VMPersonDataVariable.PersonType, 1);
             else SetPersonData(VMPersonDataVariable.PersonType, lastPersonType);
             SetPersonData(VMPersonDataVariable.VisitorSchedule, sched);
             SetPersonData(VMPersonDataVariable.GreetStatus, 0);
