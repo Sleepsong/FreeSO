@@ -68,7 +68,7 @@ namespace FSO.SimAntics.Primitives
                     var beforeDir = obj.Direction;
                     var found = FindLocationVector(obj, refObj, context.VM.Context, intDir, flags, operand.PreferNonEmpty, attempts);
                     if (operand.Mode == 3 && IsCar(obj))
-                        found = SettleCar(obj, refObj, context.VM.Context, intDir, flags, found, before, beforeDir, attempts);
+                        found = SettleCar(obj, refObj, context.VM.Context, intDir, flags, operand.PreferNonEmpty, found, before, beforeDir, attempts);
                     return found ? VMPrimitiveExitCode.GOTO_TRUE : VMPrimitiveExitCode.GOTO_FALSE;
                 case 5:
                     //random
@@ -112,8 +112,6 @@ namespace FSO.SimAntics.Primitives
 
         /// <summary>A car placed this many tiles or fewer from its portal is left where the search put it.</summary>
         private const int NearPortal = 3;
-        /// <summary>How far beside and along the portal's line <see cref="SettleCar"/> looks, in tiles.</summary>
-        private const int LaneReach = 12;
 
         //which way a car drives: north is -y (a car's lead tile is its front; DirectionVectors above points behind)
         private static LotTilePos[] Forward = {
@@ -123,31 +121,25 @@ namespace FSO.SimAntics.Primitives
             new LotTilePos(-16, 0, 0), //WEST
         };
 
-        //spots beside the portal's line, nearest first: (tiles across, tiles along)
-        private static readonly List<Tuple<int, int>> LaneOrder = Enumerable.Range(-LaneReach, LaneReach * 2 + 1)
-            .SelectMany(k => Enumerable.Range(-LaneReach, LaneReach * 2 + 1).Select(j => Tuple.Create(k, j)))
-            .Where(x => x.Item1 != 0)
-            .OrderBy(x => Math.Abs(x.Item1) + Math.Abs(x.Item2)).ThenBy(x => Math.Abs(x.Item1)).ThenBy(x => x.Item2).ThenBy(x => x.Item1)
-            .ToList();
-
         /// <summary>
         /// A car leaves a TS1 lot by driving forward until it's off the lot: "drive away" snaps it ahead along its
         /// facing, and when something's in the way it honks and tries again, for up to two game hours, before it
         /// vanishes. So a car is only any use where it can drive off.
         ///
-        /// Studio Town lot 85's car portal is inside the spa building, facing north. The only spot on its line that
-        /// fits a car is a pull-in 12 tiles behind it, nose to the building's front, so every car stopped there
-        /// (drop-off cars, and the cab home) sat honking until it gave up, and the next car had nowhere to go. The
-        /// street is 6 tiles to the side. How the original game gets cars there isn't known; this gets them there.
+        /// Studio Town lot 85 has two car portals: 927 inside the spa building facing north, and 928 on the street
+        /// facing south. Cars look up the first portal of the type, which here is 927. The only spot on its line that
+        /// fits a car is a pull-in 12 tiles behind it, nose to the building's front, so every car stopped there (the
+        /// drop-off cars, and the cab home) sat honking until it gave up, and the next car had nowhere to go. Why the
+        /// original game ends up on the street isn't known; the lot's own street portal is the obvious place.
         ///
-        /// A car the search along the line put more than <see cref="NearPortal"/> tiles from its portal, with something
-        /// other than a Sim or another car between it and the lot's edge, or that it couldn't place at all, goes to the
-        /// nearest spot on a line beside the portal's (same facing) that it can drive off from. Failing that it stays
-        /// where it was put, or isn't placed. Cars placed by their portal, as on every other lot seen so far, are
-        /// left alone.
+        /// A car that the search along its portal's line put more than <see cref="NearPortal"/> tiles away, with
+        /// something other than a Sim or another car between it and the lot's edge, or couldn't place at all, is placed
+        /// from the lot's other portals of the same kind instead (each searched along its own line, facing its own
+        /// way), at the first spot it can drive off from. Failing that it stays where it was put, or isn't placed.
+        /// Lots with one portal, and cars placed by their portal (every other lot seen so far), are unchanged.
         /// </summary>
         private static bool SettleCar(VMEntity obj, VMEntity refObj, VMContext context, int dir, VMPlaceRequestFlags flags,
-            bool found, LotTilePos before, Direction beforeDir, List<string> attempts)
+            bool preferNonEmpty, bool found, LotTilePos before, Direction beforeDir, List<string> attempts)
         {
             if (dir % 2 != 0) return found;
             var facing = (Direction)(1 << dir);
@@ -159,33 +151,32 @@ namespace FSO.SimAntics.Primitives
                 if (distance <= NearPortal) return true;
                 var blocker = DriveBlocker(obj, obj.Position, facing, context, flags);
                 if (blocker == null) return true;
-                attempts?.Add($"note: the spot on the line is {distance} tiles from {refObj}, and a car there can't drive off the lot ({blocker} is ahead); looking beside the line");
+                attempts?.Add($"note: the spot on the line is {distance} tiles from {refObj}, and a car there can't drive off the lot ({blocker} is ahead)");
             }
-            else attempts?.Add("note: nothing on the line fits; looking beside it");
+            else attempts?.Add($"note: nothing on {refObj}'s line fits");
 
-            var step = DirectionVectors[dir];
-            var lateral = new LotTilePos(step.y, (short)-step.x, 0);
-            var origin = refObj.Position;
-            foreach (var lane in LaneOrder)
+            var others = (context.ObjectQueries.GetObjectsByGUID(refObj.Object.OBJ.GUID) ?? new List<VMEntity>())
+                .Where(x => x != refObj && x.Position != LotTilePos.OUT_OF_WORLD).OrderBy(x => x.ObjectID).ToList();
+            foreach (var other in others)
             {
-                var pos = new LotTilePos((short)(origin.x + lateral.x * lane.Item1 + step.x * lane.Item2),
-                    (short)(origin.y + lateral.y * lane.Item1 + step.y * lane.Item2), origin.Level);
-                if (context.IsOutOfBounds(pos)) continue;
-                if (!Try(obj, pos, facing, context, flags, attempts)) continue;
-                var blocker = DriveBlocker(obj, pos, facing, context, flags);
+                var otherDir = (int)Math.Round(Math.Log((double)other.Direction, 2));
+                if (otherDir % 2 != 0) continue;
+                attempts?.Add($"note: trying the lot's other {other} (object {other.ObjectID}) at ({other.Position.x / 16f:0.##},{other.Position.y / 16f:0.##}) facing {other.Direction}");
+                if (!SearchVector(obj, other, context, otherDir, flags, preferNonEmpty, attempts, new LotTilePos())) continue;
+                var blocker = DriveBlocker(obj, obj.Position, (Direction)(1 << otherDir), context, flags);
                 if (blocker == null)
                 {
-                    attempts?.Add($"note: placed {Math.Abs(lane.Item1)} tiles to the side of the line, {Math.Abs(lane.Item2)} along it, where a car can drive off the lot");
+                    attempts?.Add($"note: placed by object {other.ObjectID}, {TileDistance(obj.Position, other.Position)} tiles from it, where a car can drive off the lot");
                     return true;
                 }
-                if (attempts != null) attempts[attempts.Count - 1] += $", but {blocker} is ahead";
+                attempts?.Add($"note: a car there can't drive off the lot either ({blocker} is ahead)");
             }
 
-            //nothing beside the line either: back to where the search left it
+            //no other portal does better: back to where the search left it
             if (spot != null)
             {
                 obj.SetPosition(spot.Value, facing, context, flags);
-                attempts?.Add("note: no spot beside the line can drive off either; kept the one on it");
+                if (others.Count > 0) attempts?.Add("note: kept the spot on the first portal's line");
                 return true;
             }
             obj.SetPosition(before, beforeDir, context, flags);
