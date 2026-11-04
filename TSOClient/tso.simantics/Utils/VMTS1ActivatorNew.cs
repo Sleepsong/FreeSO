@@ -193,6 +193,7 @@ namespace FSO.SimAntics.Utils
             arch.Terrain.Heights = Array.ConvertAll(VMTS1Activator.ResizeGrass(VMTS1Activator.DecodeHeights(iff.Get<ARRY>(0).TransposeData), size), x => (short)(x * 10));
             arch.Terrain.RegenerateCenters();
             arch.RoofStyle = (uint)Content.Content.Get().WorldRoofs.NameToID(hous.RoofName.ToLowerInvariant() + ".bmp");
+            arch.RoofPitch = hous.RoofPitch;
 
             arch.FloorsDirty = true;
             arch.WallsDirty = true;
