@@ -19,6 +19,28 @@ namespace FSO.Common.Utils
             if (OperatingSystem.IsWindows())
                 return File.Exists(file) ? file : null;
 
+            var resolved = Resolve(file);
+            return (resolved != null && File.Exists(resolved)) ? resolved : null;
+        }
+
+        /// <summary>
+        /// Resolves a directory path case-insensitively on Linux/macOS, as Insensitive does for files.
+        /// On Windows, simply checks if the directory exists.
+        /// </summary>
+        public static string InsensitiveDirectory(string dir)
+        {
+            if (string.IsNullOrEmpty(dir))
+                return null;
+
+            if (OperatingSystem.IsWindows())
+                return Directory.Exists(dir) ? dir : null;
+
+            var resolved = Resolve(dir);
+            return (resolved != null && Directory.Exists(resolved)) ? resolved : null;
+        }
+
+        private static string Resolve(string file)
+        {
             file = file.Replace('\\', '/');
 
             string[] parts;
@@ -62,7 +84,7 @@ namespace FSO.Common.Utils
                 }
             }
 
-            return File.Exists(resolved) ? resolved : null;
+            return resolved;
         }
     }
 }

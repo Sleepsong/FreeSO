@@ -170,8 +170,9 @@ namespace FSO.HIT
                             }
                         }
                     }
-                    catch (Exception)
+                    catch (Exception e)
                     {
+                        FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + (Name ?? "?") + "' stopped on an error (" + e.GetType().Name + ": " + e.Message + ").");
                         return false;
                     }
                 }

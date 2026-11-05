@@ -29,6 +29,23 @@ namespace FSO.Content.TS1
         /** Audio Cache **/
         public Dictionary<Patch, SoundEffect> SFXCache = new Dictionary<Patch, SoundEffect>();
 
+        /// <summary>
+        /// Notes about sounds that couldn't be played, for a log (the frontend sets it, e.g. with -logs). These failures
+        /// are otherwise silent. Each message is noted once.
+        /// </summary>
+        public static Action<string> Note;
+        private static HashSet<string> Noted = new HashSet<string>();
+
+        public static void NoteOnce(string message)
+        {
+            if (Note == null) return;
+            lock (Noted)
+            {
+                if (!Noted.Add(message)) return;
+            }
+            Note(message);
+        }
+
         private Dictionary<string, HITEventRegistration> _Events = new Dictionary<string, HITEventRegistration>();
         public Dictionary<string, HITEventRegistration> Events
         {
@@ -220,12 +237,25 @@ namespace FSO.Content.TS1
             if (patch == null) return null;
             if (SFXCache.ContainsKey(patch)) return SFXCache[patch];
 
-            var aud = GetAudioFrom(patch.Filename);
+            DecodedSFX aud;
+            SoundEffect sfx;
+            try
+            {
+                aud = GetAudioFrom(patch.Filename);
+                if (aud != null)
+                {
+                    using (var stream = new MemoryStream(aud.Data)) sfx = SoundEffect.FromStream(stream);
+                }
+                else sfx = null;
+            }
+            catch (Exception e)
+            {
+                NoteOnce(patch.Filename + " couldn't be decoded (" + e.GetType().Name + ": " + e.Message + ").");
+                SFXCache.Add(patch, null);
+                return null;
+            }
             if (aud != null)
             {
-                var stream = new MemoryStream(aud.Data);
-                var sfx = SoundEffect.FromStream(stream);
-                stream.Close();
                 SFXCache.Add(patch, sfx);
                 switch (aud.Filetype)
                 {
@@ -244,6 +274,7 @@ namespace FSO.Content.TS1
             else
             {
                 Console.WriteLine(patch.Filename+" was null");
+                NoteOnce(patch.Filename + " wasn't found in the game's sound files.");
                 return null;// pinnedArray; //we couldn't find anything! can't return null so do this... not the best idea tbh
             }
         }
@@ -266,6 +297,7 @@ namespace FSO.Content.TS1
                     return UTKSounds.Get(fname);
             }
             Console.WriteLine("what... "+ext);
+            NoteOnce(fileName + " has a sound type the game doesn't know (" + ext + ").");
             return null;
         }
 

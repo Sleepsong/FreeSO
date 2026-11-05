@@ -282,6 +282,12 @@ namespace FSO.HIT
                 }
             }
 
+            if (content.TS1)
+            {
+                FSO.Content.TS1.TS1Audio.NoteOnce((evts != null && evts.ContainsKey(evt))
+                    ? "Sound event '" + evt + "' has nothing to play (no routine or track for it)."
+                    : "No sound event named '" + evt + "' in the game's sound data.");
+            }
             return null;
         }
     }
