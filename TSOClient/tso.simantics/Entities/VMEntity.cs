@@ -361,11 +361,18 @@ namespace FSO.SimAntics
                     if (rcs != null)
                     {
                         var vp = VisualPosition * 3f;
-                        var delta = rcs.Camera.Target - new Vector3(vp.X, vp.Z, vp.Y);
-                        delta.Z /= 3f;
-                        //volume = 4f / delta.Length();
-                        volume = 1.5f - delta.Length() / 40f;
-                        volume *= (10 / ((rcs.Zoom3D * rcs.Zoom3D) + 10));
+                        //as in 2D: a sound played without panning (No Pan) isn't placed in the world, so it doesn't fade with
+                        //distance from the camera, and one played with No Zoom doesn't fade as the camera zooms out. Here both
+                        //always faded, so dialog stings and events played by objects off the lot or far away went silent.
+                        if (SoundThreads[i].Pan)
+                        {
+                            var delta = rcs.Camera.Target - new Vector3(vp.X, vp.Z, vp.Y);
+                            delta.Z /= 3f;
+                            //volume = 4f / delta.Length();
+                            volume = 1.5f - delta.Length() / 40f;
+                        }
+                        else volume = 1;
+                        if (SoundThreads[i].Zoom) volume *= (10 / ((rcs.Zoom3D * rcs.Zoom3D) + 10));
                         volume *= worldState.PreciseZoom;
 
                         //Calculate 3D sound
@@ -402,6 +409,21 @@ namespace FSO.SimAntics
                     else if (Position.Level != worldState.Level) volume /= 2;
 
                     volume = Math.Min(1f, Math.Max(0f, volume));
+
+                    if (!SoundThreads[i].VolumeChecked)
+                    {
+                        //a sound that starts silent because of where its owner is leaves no other trace
+                        SoundThreads[i].VolumeChecked = true;
+                        if (volume < 0.01f)
+                        {
+                            var why = (Position == LotTilePos.OUT_OF_WORLD) ? "its owner is off the lot"
+                                : (Position.Level != worldState.Level) ? "its owner is on another floor"
+                                : "its owner is too far from the camera";
+                            FSO.Content.TS1.TS1Audio.NoteOnce("'" + (SoundThreads[i].Name ?? sound.Name) + "' from " + (Object?.OBJ?.ChunkLabel ?? ("object " + ObjectID))
+                                + " started at volume 0: " + why + " (pans: " + SoundThreads[i].Pan + ", fades with zoom: " + SoundThreads[i].Zoom
+                                + ", " + ((rcs != null) ? "3D camera" : "2D camera") + ").");
+                        }
+                    }
 
                     if (sound.SetVolume(volume, pan, ObjectID))
                     {
