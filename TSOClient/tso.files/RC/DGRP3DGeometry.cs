@@ -64,6 +64,8 @@ namespace FSO.Files.RC
         public ushort PixelDir;
 
         public ushort CustomTexture;
+        /// <summary>The replacement texture file this geometry asked for (custom textures only).</summary>
+        public string TextureName;
         public static Func<string, DGRP3DTextureSource?> ReplTextureProvider;
 
         public List<DGRP3DVert> SVerts; //simplified vertices
@@ -119,6 +121,7 @@ namespace FSO.Files.RC
                 {
                     var name = source.ChunkParent.Filename.Replace('.', '_').Replace("spf", "iff");
                     name += "_TEX_" + PixelSPR + ".png";
+                    TextureName = name;
                     var pxSource = ReplTextureProvider(name) ?? DGRP3DTextureSource.WithDecoded(source.ChunkParent.Get<MTEX>(PixelSPR), gd);
                     PixelSource = pxSource ?? default;
                 }
