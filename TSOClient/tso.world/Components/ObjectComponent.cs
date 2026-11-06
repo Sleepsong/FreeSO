@@ -512,6 +512,7 @@ namespace FSO.LotView.Components
             {
                 var mworld = World3D;
                 dgrp.World = mworld;
+                dgrp.InObject = Container is ObjectComponent; //in a counter, not in a Sim's hand
                 if (this.DrawGroup != null) dgrp.Draw3D(world);
             }
             if (world.CameraMode == CameraRenderMode._2D && Mode.IsSet(ComponentRenderMode._2D))
