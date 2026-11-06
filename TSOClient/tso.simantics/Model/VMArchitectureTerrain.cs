@@ -260,16 +260,43 @@ namespace FSO.SimAntics.Model
             VMSerializableUtils.WriteArray(writer, Heights);
             writer.Write(GrassState.Length);
             writer.Write(GrassState);
+        }
 
-            // version 39: foundations (only stored if the lot has any)
-            var hasFoundations = Foundations != null && Foundations.Any;
-            writer.Write(hasFoundations);
-            if (hasFoundations)
-            {
-                VMSerializableUtils.WriteArray(writer, Foundations.Raise);
-                writer.Write(Foundations.Steps);
-                VMSerializableUtils.WriteArray(writer, Foundations.Pattern);
-            }
+        /// <summary>
+        /// Foundations, saved at the very end of a save (version 39 on; see VMMarshal) rather than with the terrain, so
+        /// builds without foundations still read the rest of the lot (they stop before this).
+        /// </summary>
+        public static void WriteFoundations(BinaryWriter writer, FoundationMap map)
+        {
+            var has = map != null && map.Any;
+            writer.Write(has);
+            if (!has) return;
+            writer.Write(map.Width);
+            writer.Write(map.Height);
+            VMSerializableUtils.WriteArray(writer, map.Raise);
+            writer.Write(map.Steps);
+            VMSerializableUtils.WriteArray(writer, map.Pattern);
+        }
+
+        /// <summary>Reads what <see cref="WriteFoundations"/> wrote: null if the lot has none.</summary>
+        public static FoundationMap ReadFoundations(BinaryReader reader)
+        {
+            if (!reader.ReadBoolean()) return null;
+            int width = reader.ReadInt32(), height = reader.ReadInt32();
+            var map = new FoundationMap(width, height);
+            map.Raise = VMSerializableUtils.ReadArray<short>(reader, width * height);
+            map.Steps = reader.ReadBytes(width * height);
+            map.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
+            map.Refresh();
+            return map;
+        }
+
+        /// <summary>Takes on saved foundations (if they fit this lot).</summary>
+        public void SetFoundations(FoundationMap map)
+        {
+            if (map == null || map.Width != Width || map.Height != Height) return;
+            Foundations.CopyFrom(map);
+            Foundations.Refresh();
         }
 
         public void Deserialize(BinaryReader reader)
@@ -291,14 +318,6 @@ namespace FSO.SimAntics.Model
 
             Foundations = new FoundationMap(Width, Height);
             VisFoundations = new FoundationMap(Width, Height);
-            if (Version > 38 && reader.ReadBoolean())
-            {
-                var size = Width * Height;
-                Foundations.Raise = VMSerializableUtils.ReadArray<short>(reader, size);
-                Foundations.Steps = reader.ReadBytes(size);
-                Foundations.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, size);
-                Foundations.Refresh();
-            }
         }
     }
 }

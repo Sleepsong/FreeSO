@@ -1028,7 +1028,8 @@ namespace FSO.SimAntics
                 RoofStyle = RoofStyle,
                 IDMap = Context.VM.TS1 ? new VMResourceIDMarshal(Context.VM) : null,
 
-                BuildBuyEnabled = BuildBuyEnabled
+                BuildBuyEnabled = BuildBuyEnabled,
+                Foundations = (Terrain.Foundations?.Any == true) ? Terrain.Foundations.Clone() : null
             };
             marshal.Preserialize(); //this must be done to keep async serialization thread safe.
             //in other places we just clone mutable state, but here there are so many deep

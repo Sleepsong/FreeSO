@@ -30,6 +30,12 @@ namespace FSO.SimAntics.Marshals
 
         public byte[] Preserialized;
 
+        /// <summary>
+        /// A copy of the foundations when saved (null for none). Not written with the architecture: VMMarshal puts
+        /// them at the end of the save (version 39), where builds without foundations don't read.
+        /// </summary>
+        public FoundationMap Foundations;
+
         public int Version;
         public VMArchitectureMarshal() { }
         public VMArchitectureMarshal(int version) { Version = version; }
