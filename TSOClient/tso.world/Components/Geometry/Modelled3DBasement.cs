@@ -25,6 +25,12 @@ namespace FSO.LotView.Components.Geometry
             return false;
         }
 
+        /// <summary>The texture's v up a side: a wall covering as walls map it, or plain concrete at the floor's scale.</summary>
+        private float SideV(float height)
+        {
+            return (WallPattern == 0) ? -height : WallV(height);
+        }
+
         protected override void GenerateGeometry()
         {
             var verts = new List<TerrainParallaxVertex>();
@@ -58,7 +64,7 @@ namespace FSO.LotView.Components.Geometry
                             AddQuad(verts, inds,
                                 new Vector3(a.X, ga, a.Y), new Vector3(b.X, gb, b.Y),
                                 new Vector3(b.X, gb + StoreyHeight, b.Y), new Vector3(a.X, ga + StoreyHeight, a.Y), normal,
-                                new Vector2(ua, WallV(0)), new Vector2(ub, WallV(0)), new Vector2(ub, WallV(StoreyHeight)), new Vector2(ua, WallV(StoreyHeight)));
+                                new Vector2(ua, SideV(0)), new Vector2(ub, SideV(0)), new Vector2(ub, SideV(StoreyHeight)), new Vector2(ua, SideV(StoreyHeight)));
                         }
                     }
                 }

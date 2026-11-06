@@ -27,7 +27,7 @@ namespace FSO.LotView.Model
         public short[] Raise;
         /// <summary>Per tile: 0 for no steps, else 1 + the direction (see <see cref="Directions"/>) the steps rise toward.</summary>
         public byte[] Steps;
-        /// <summary>Per tile: the wall covering (a wall pattern ID) on the sides of the foundation and its steps.</summary>
+        /// <summary>Per tile: the wall covering (a wall pattern ID) on the foundation's sides, 0 for plain concrete (caps, tops and steps are always concrete).</summary>
         public ushort[] Pattern;
 
         /// <summary>True if any tile has a foundation or steps (kept up to date by <see cref="Refresh"/>).</summary>
