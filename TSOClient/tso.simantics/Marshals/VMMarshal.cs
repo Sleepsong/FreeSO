@@ -110,6 +110,10 @@ namespace FSO.SimAntics.Marshals
                     Tuning = new DynamicTuning(reader);
             }
 
+            //terrain paint (the terrain paint tool): a marked block at the very end, if the lot has any
+            var arch = Context?.Architecture;
+            if (arch != null) arch.TerrainPaint = Model.VMArchitectureTerrain.ReadPaintIfPresent(reader, arch.Width, arch.Height);
+
             if (Compressed)
             {
                 reader.BaseStream.Close();
@@ -169,6 +173,10 @@ namespace FSO.SimAntics.Marshals
 
             writer.Write(Tuning != null);
             if (Tuning != null) Tuning.SerializeInto(writer);
+
+            //terrain paint last, so builds without it read everything before and stop
+            var arch = Context?.Architecture;
+            if (arch?.TerrainPaint != null) Model.VMArchitectureTerrain.WritePaint(writer, arch.Width, arch.Height, arch.TerrainPaint);
 
             if (Compressed)
             {

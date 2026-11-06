@@ -401,7 +401,7 @@ namespace FSO.SimAntics
                     WorldUI.Altitude = Terrain.Heights;
 
                     WorldUI.AltitudeCenters = Terrain.Centers;
-                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState);
+                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState, Terrain.Paint);
 
                 }
                 TerrainDirty = false;
@@ -415,7 +415,7 @@ namespace FSO.SimAntics
                 WorldUI.SignalFloorChange();
                 if (TerrainDirty)
                 {
-                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.VisHeights, Terrain.VisGrass);
+                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.VisHeights, Terrain.VisGrass, Terrain.VisPaint);
                     TerrainDirty = false;
                 }
             }
@@ -629,6 +629,10 @@ namespace FSO.SimAntics
                             ));
                         }
                         break;
+                    case VMArchitectureCommandType.TERRAIN_PAINT:
+                        var painted = VMTerrainPaintTools.Paint(this, com);
+                        cost += painted;
+                        break;
                     case VMArchitectureCommandType.GRASS_DOT:
                         var dotCount = VMArchitectureTools.DotTerrain(this, new Point(com.x, com.y), (short)com.pattern);
                         cost += dotCount;
@@ -829,6 +833,13 @@ namespace FSO.SimAntics
             Redraw = true;
         }
 
+        /// <summary>The paint changed (the terrain paint tool): show it.</summary>
+        public void SignalTerrainPaint()
+        {
+            TerrainDirty = true;
+            Redraw = true;
+        }
+
         public byte GetTerrainGrass(short tileX, short tileY)
         {
             var off = GetOffset(tileX, tileY);
@@ -959,7 +970,8 @@ namespace FSO.SimAntics
                 RoofStyle = RoofStyle,
                 IDMap = Context.VM.TS1 ? new VMResourceIDMarshal(Context.VM) : null,
 
-                BuildBuyEnabled = BuildBuyEnabled
+                BuildBuyEnabled = BuildBuyEnabled,
+                TerrainPaint = Terrain.AnyPaint ? (byte[])Terrain.Paint.Clone() : null
             };
             marshal.Preserialize(); //this must be done to keep async serialization thread safe.
             //in other places we just clone mutable state, but here there are so many deep
@@ -983,6 +995,7 @@ namespace FSO.SimAntics
             RoofStyle = input.RoofStyle;
 
             BuildBuyEnabled = input.BuildBuyEnabled;
+            Terrain.Paint = (input.TerrainPaint != null && input.TerrainPaint.Length == Terrain.Width * Terrain.Height) ? (byte[])input.TerrainPaint.Clone() : null;
 
             RegenWallsAt();
             SignalTerrainRedraw();

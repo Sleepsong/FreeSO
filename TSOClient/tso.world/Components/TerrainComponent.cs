@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework;
 using System.IO;
@@ -26,6 +27,18 @@ namespace FSO.LotView.Components
 
         private int GeomLength;
         private byte[] GrassState; //0 = green, 255 = brown. to start with, should be randomly distriuted in range 0-128.
+        /// <summary>
+        /// Painted terrain (the terrain paint tool): a TerrainType per point, laid out like GrassState, 255 for the lot's
+        /// own ground. Null when nothing is painted.
+        /// </summary>
+        private byte[] Paint;
+        /// <summary>
+        /// Grass blades for each painted terrain type: a copy of the ground's vertices where only that type's points
+        /// grow blades, drawn with that type's colours and blade height.
+        /// </summary>
+        private List<(TerrainType type, VertexBuffer vb)> PaintBlades = new List<(TerrainType, VertexBuffer)>();
+        /// <summary>False when every point is painted (the lot's own blades have nowhere to grow).</summary>
+        private bool AnyUnpainted = true;
         private short[] GroundHeight;
         private int NumPrimitives;
         private int BladePrimitives;
@@ -70,8 +83,9 @@ namespace FSO.LotView.Components
             UpdateLotType();
         }
 
-        public void UpdateTerrain(TerrainType light, TerrainType dark, short[] heights, byte[] grass)
+        public void UpdateTerrain(TerrainType light, TerrainType dark, short[] heights, byte[] grass, byte[] paint = null)
         {
+            Paint = paint;
             //DECEMBER TEMP: snow replace
             //TODO: tie to tuning, or serverside weather system.
             LightType = light;
@@ -255,15 +269,16 @@ namespace FSO.LotView.Components
 
                     short tx = (short)x, ty = (short)y;
 
-                    Color tlCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x, y));
-                    Color trCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x + 1, y));
-                    Color blCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x, y + 1));
-                    Color brCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x + 1, y + 1));
+                    Color tlCol = GroundColor(x, y);
+                    Color trCol = GroundColor(x + 1, y);
+                    Color blCol = GroundColor(x, y + 1);
+                    Color brCol = GroundColor(x + 1, y + 1);
 
-                    Geom[geomOffset++] = new TerrainParallaxVertex(tl, tlCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y) * 0.5f), GetGrassState(x, y), GetNormalAt(x, y));
-                    Geom[geomOffset++] = new TerrainParallaxVertex(tr, trCol.ToVector4(), new Vector2(((x - y) + 2) * 0.5f, (x + 1 + y) * 0.5f), GetGrassState(x + 1, y), GetNormalAt(x + 1, y));
-                    Geom[geomOffset++] = new TerrainParallaxVertex(br, brCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y + 2) * 0.5f), GetGrassState(x + 1, y + 1), GetNormalAt(x + 1, y + 1));
-                    Geom[geomOffset++] = new TerrainParallaxVertex(bl, blCol.ToVector4(), new Vector2((x - y) * 0.5f, (x + y + 1) * 0.5f), GetGrassState(x, y + 1), GetNormalAt(x, y + 1));
+                    //(painted points grow their blades in their own pass: none with the lot's)
+                    Geom[geomOffset++] = new TerrainParallaxVertex(tl, tlCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y) * 0.5f), LotBlades(x, y), GetNormalAt(x, y));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(tr, trCol.ToVector4(), new Vector2(((x - y) + 2) * 0.5f, (x + 1 + y) * 0.5f), LotBlades(x + 1, y), GetNormalAt(x + 1, y));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(br, brCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y + 2) * 0.5f), LotBlades(x + 1, y + 1), GetNormalAt(x + 1, y + 1));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(bl, blCol.ToVector4(), new Vector2((x - y) * 0.5f, (x + y + 1) * 0.5f), LotBlades(x, y + 1), GetNormalAt(x, y + 1));
                 }
             }
 
@@ -272,6 +287,8 @@ namespace FSO.LotView.Components
 
             VertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), Geom.Length, BufferUsage.None);
             VertexBuffer.SetData(Geom);
+
+            BuildPaintBlades(device, Geom, quads);
 
             IndexBuffer = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, sizeof(int) * Indexes.Length, BufferUsage.None);
             IndexBuffer.SetData(Indexes);
@@ -306,6 +323,90 @@ namespace FSO.LotView.Components
             var dat = new TerrainParallaxVertex[VertexBuffer.VertexCount];
             VertexBuffer.GetData<TerrainParallaxVertex>(dat);
             return dat;
+        }
+
+        /// <summary>The painted terrain type at a point, or null for the lot's own ground.</summary>
+        private TerrainType? PaintAt(int x, int y)
+        {
+            if (Paint == null) return null;
+            var offset = (y - 1) * Size.Width + x - 1;
+            if (offset < 0 || offset >= Paint.Length) return null;
+            var p = Paint[offset];
+            if (p == 255 || p >= LotTypeGrassInfo.LightGreen.Length) return null;
+            return (TerrainType)p;
+        }
+
+        /// <summary>The ground's colour at a point: its painted type's, or the lot's.</summary>
+        private Color GroundColor(int x, int y)
+        {
+            var grass = GetGrassState(x, y);
+            var paint = PaintAt(x, y);
+            if (paint == null) return Color.Lerp(LightGreen, LightBrown, grass);
+            var t = (int)paint.Value;
+            return Color.Lerp(LotTypeGrassInfo.LightGreen[t], LotTypeGrassInfo.LightBrown[t], grass);
+        }
+
+        /// <summary>
+        /// The blade value for the lot's own blades at a point: its grass state, or 2 (no blades: the shader keeps a
+        /// blade with chance (2 - x) / 2) where the point is painted.
+        /// </summary>
+        private float LotBlades(int x, int y)
+        {
+            return (PaintAt(x, y) == null) ? GetGrassState(x, y) : 2f;
+        }
+
+        private void DisposePaintBlades()
+        {
+            foreach (var pass in PaintBlades) pass.vb.Dispose();
+            PaintBlades.Clear();
+        }
+
+        /// <summary>A copy of the ground for each painted type, where only that type's points grow blades.</summary>
+        private void BuildPaintBlades(GraphicsDevice device, TerrainParallaxVertex[] geom, int quads)
+        {
+            DisposePaintBlades();
+            AnyUnpainted = true;
+            if (Paint == null) return;
+
+            //the type at each vertex of the ground (in the order RegenTerrain made them)
+            var types = new TerrainType?[geom.Length];
+            int v = 0;
+            for (var y = 0; y < quads; y++)
+            {
+                for (var x = 0; x < quads; x++)
+                {
+                    types[v++] = PaintAt(x, y);
+                    types[v++] = PaintAt(x + 1, y);
+                    types[v++] = PaintAt(x + 1, y + 1);
+                    types[v++] = PaintAt(x, y + 1);
+                }
+            }
+            AnyUnpainted = types.Any(t => t == null);
+            foreach (var type in types.Where(t => t != null).Select(t => t.Value).Distinct().OrderBy(t => (int)t))
+            {
+                var copy = (TerrainParallaxVertex[])geom.Clone();
+                for (int i = 0; i < copy.Length; i++)
+                {
+                    copy[i].GrassInfo.X = (types[i] == type) ? GetGrassStateForVertex(i, quads) : 2f;
+                }
+                var vb = new VertexBuffer(device, typeof(TerrainParallaxVertex), copy.Length, BufferUsage.None);
+                vb.SetData(copy);
+                PaintBlades.Add((type, vb));
+            }
+        }
+
+        private float GetGrassStateForVertex(int i, int quads)
+        {
+            var quad = i / 4;
+            var x = quad % quads;
+            var y = quad / quads;
+            switch (i % 4)
+            {
+                case 0: return GetGrassState(x, y);
+                case 1: return GetGrassState(x + 1, y);
+                case 2: return GetGrassState(x + 1, y + 1);
+                default: return GetGrassState(x, y + 1);
+            }
         }
 
         private float GetGrassState(int x, int y)
@@ -556,6 +657,31 @@ namespace FSO.LotView.Components
                 var depth = device.DepthStencilState;
                 device.DepthStencilState = DepthStencilState.DepthRead;
                     
+                //the lot's blades, then each painted terrain type's (with its colours and blade height)
+                var bladePasses = new List<(VertexBuffer vb, int height, float density, Color lg, Color dg, Color lb, Color db)>();
+                if (AnyUnpainted) bladePasses.Add((VertexBuffer, GrassHeight, GrassDensityScale, LightGreen, DarkGreen, LightBrown, DarkBrown));
+                foreach (var paintPass in PaintBlades)
+                {
+                    var t = (int)paintPass.type;
+                    var height = LotTypeGrassInfo.Heights[t];
+                    if (!FSOEnvironment.UseMRT) height /= 2;
+                    if (height == 0) height = 1;
+                    bladePasses.Add((paintPass.vb, height, LotTypeGrassInfo.GrassDensity[t], LotTypeGrassInfo.LightGreen[t], LotTypeGrassInfo.DarkGreen[t], LotTypeGrassInfo.LightBrown[t], LotTypeGrassInfo.DarkBrown[t]));
+                }
+                var startOffset = offset;
+                var startScale = grassScale;
+                var lotDensity = grassDensity / GrassDensityScale;
+                foreach (var bladePass in bladePasses)
+                {
+                offset = startOffset;
+                grassScale = startScale;
+                grassNum = (int)Math.Ceiling(bladePass.height / (float)grassScale);
+                grassDensity = lotDensity * bladePass.density;
+                Effect.LightGreen = bladePass.lg.ToVector4();
+                Effect.DarkGreen = bladePass.dg.ToVector4();
+                Effect.LightBrown = bladePass.lb.ToVector4();
+                Effect.DarkBrown = bladePass.db.ToVector4();
+                device.SetVertexBuffer(bladePass.vb);
                 if (parallax) { 
                     grassScale *= grassNum;
                     grassNum = 1;
@@ -581,6 +707,13 @@ namespace FSO.LotView.Components
                         pass.Apply();
                         device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, primitives);
                     }
+                }
+                    //back to the lot's ground and colours
+                    device.SetVertexBuffer(VertexBuffer);
+                    Effect.LightGreen = LightGreen.ToVector4();
+                    Effect.DarkGreen = DarkGreen.ToVector4();
+                    Effect.LightBrown = LightBrown.ToVector4();
+                    Effect.DarkBrown = DarkBrown.ToVector4();
                     if (FSOEnvironment.UseMRT)
                     {
                         device.SetRenderTargets(rts);
@@ -852,6 +985,7 @@ namespace FSO.LotView.Components
 
         public void Dispose()
         {
+            DisposePaintBlades();
             if (VertexBuffer != null)
             {
                 IndexBuffer.Dispose();

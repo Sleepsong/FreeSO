@@ -30,6 +30,12 @@ namespace FSO.SimAntics.Marshals
 
         public byte[] Preserialized;
 
+        /// <summary>
+        /// A copy of the terrain paint when saved (null for none). Not written with the architecture: VMMarshal puts it
+        /// at the very end of the save, where builds without terrain paint don't read.
+        /// </summary>
+        public byte[] TerrainPaint;
+
         public int Version;
         public VMArchitectureMarshal() { }
         public VMArchitectureMarshal(int version) { Version = version; }

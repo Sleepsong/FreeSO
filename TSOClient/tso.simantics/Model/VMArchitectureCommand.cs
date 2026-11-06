@@ -65,6 +65,8 @@ namespace FSO.SimAntics.Model
         TERRAIN_RAISE,
         TERRAIN_FLATTEN,
 
-        GRASS_DOT
+        GRASS_DOT,
+
+        TERRAIN_PAINT //x, y: centre point (as GRASS_DOT). x2: brush radius. pattern: TerrainType, 255 back to the lot's ground. style: 1 for a soft edge
     }
 }

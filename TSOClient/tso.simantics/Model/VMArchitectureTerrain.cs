@@ -21,6 +21,15 @@ namespace FSO.SimAntics.Model
         private short[] OldHeights;
         private byte[] OldGrass;
 
+        /// <summary>
+        /// Painted terrain (the terrain paint tool, as in The Sims 2): a TerrainType for each point, laid out like
+        /// GrassState, or Unpainted for the lot's own ground. Null until something is painted.
+        /// </summary>
+        public byte[] Paint;
+        public byte[] VisPaint;
+        private byte[] OldPaint;
+        public const byte Unpainted = 255;
+
         public TerrainType LightType = TerrainType.GRASS;
         public TerrainType DarkType = TerrainType.GRASS;
         public int Version;
@@ -46,18 +55,81 @@ namespace FSO.SimAntics.Model
         {
             OldHeights = Heights;
             OldGrass = GrassState;
+            OldPaint = Paint;
 
             Array.Copy(Heights, VisHeights, Heights.Length);
             Array.Copy(GrassState, VisGrass, GrassState.Length);
+            VisPaint = (Paint == null) ? null : (byte[])Paint.Clone();
 
             Heights = VisHeights;
             GrassState = VisGrass;
+            Paint = VisPaint;
         }
 
         public void ExitVis()
         {
             Heights = OldHeights;
             GrassState = OldGrass;
+            VisPaint = Paint; //(a preview may have started painting)
+            Paint = OldPaint;
+        }
+
+        /// <summary>The paint layer, made (all unpainted) if there isn't one yet.</summary>
+        public byte[] EnsurePaint()
+        {
+            if (Paint == null || Paint.Length != Width * Height)
+            {
+                Paint = new byte[Width * Height];
+                for (int i = 0; i < Paint.Length; i++) Paint[i] = Unpainted;
+            }
+            return Paint;
+        }
+
+        /// <summary>True if any of the ground is painted.</summary>
+        public bool AnyPaint
+        {
+            get
+            {
+                if (Paint == null) return false;
+                foreach (var p in Paint) if (p != Unpainted) return true;
+                return false;
+            }
+        }
+
+        // ---- saving the paint: a block at the very end of a lot's save, which builds without terrain paint never read ----
+
+        /// <summary>"TPNT", marking the block.</summary>
+        public const int PaintMagic = 0x544E5054;
+        public const byte PaintFormatVersion = 1;
+
+        public static void WritePaint(BinaryWriter writer, int width, int height, byte[] paint)
+        {
+            writer.Write(PaintMagic);
+            writer.Write(PaintFormatVersion);
+            writer.Write(width);
+            writer.Write(height);
+            writer.Write(paint.Length);
+            writer.Write(paint);
+        }
+
+        /// <summary>The paint saved after <paramref name="reader"/>'s position, or null if there isn't any there.</summary>
+        public static byte[] ReadPaintIfPresent(BinaryReader reader, int width, int height)
+        {
+            var stream = reader.BaseStream;
+            if (!stream.CanSeek || stream.Length - stream.Position < 17) return null;
+            var start = stream.Position;
+            if (reader.ReadInt32() != PaintMagic)
+            {
+                stream.Position = start;
+                return null;
+            }
+            var version = reader.ReadByte();
+            var w = reader.ReadInt32();
+            var h = reader.ReadInt32();
+            var length = reader.ReadInt32();
+            var data = reader.ReadBytes(length);
+            if (version > PaintFormatVersion || w != width || h != height || data.Length != width * height) return null;
+            return data;
         }
 
         public void RegenerateCenters() //TODO: partial update
