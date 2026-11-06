@@ -113,16 +113,10 @@ namespace FSO.LotView.Components
             return pattern == 0 && map.Raise[index] > 0;
         }
 
-        /// <summary>One model per wall covering for the foundations' sides, bare tops and steps.</summary>
+        /// <summary>The foundations' models: the concrete (caps, bare tops, steps and plain sides), and one per covering on their sides.</summary>
         private void AddFoundations(FloorLevel lvl)
         {
-            var map = Bp.Foundations;
-            if (map == null || !map.Any) return;
-            var patterns = new HashSet<ushort>();
-            for (int y = 0; y < map.Height; y++)
-                for (int x = 0; x < map.Width; x++)
-                    if (Modelled3DFoundation.HasGeometry(map, x, y)) patterns.Add(map.Pattern[y * map.Width + x]);
-            foreach (var pattern in patterns) lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, pattern));
+            foreach (var pattern in Modelled3DFoundation.Groups(Bp.Foundations)) lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, pattern));
         }
 
         public void SliceReset(GraphicsDevice gd, Rectangle slice)

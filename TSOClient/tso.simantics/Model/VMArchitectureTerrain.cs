@@ -263,13 +263,20 @@ namespace FSO.SimAntics.Model
         }
 
         /// <summary>
+        /// The foundations' own revision, written in place of the flag saying a lot has any (a reader that takes it as a
+        /// bool still sees true). 1: the sides' coverings were all put on by the build tool itself (a brick, before the
+        /// foundations were concrete); 2: a covering on the sides is one the player chose, 0 for plain concrete.
+        /// </summary>
+        public const byte FoundationsRevision = 2;
+
+        /// <summary>
         /// Foundations, saved at the very end of a save (version 39 on; see VMMarshal) rather than with the terrain, so
         /// builds without foundations still read the rest of the lot (they stop before this).
         /// </summary>
         public static void WriteFoundations(BinaryWriter writer, FoundationMap map)
         {
             var has = map != null && map.Any;
-            writer.Write(has);
+            writer.Write(has ? FoundationsRevision : (byte)0);
             if (!has) return;
             writer.Write(map.Width);
             writer.Write(map.Height);
@@ -281,12 +288,15 @@ namespace FSO.SimAntics.Model
         /// <summary>Reads what <see cref="WriteFoundations"/> wrote: null if the lot has none.</summary>
         public static FoundationMap ReadFoundations(BinaryReader reader)
         {
-            if (!reader.ReadBoolean()) return null;
+            var revision = reader.ReadByte();
+            if (revision == 0) return null;
             int width = reader.ReadInt32(), height = reader.ReadInt32();
             var map = new FoundationMap(width, height);
             map.Raise = VMSerializableUtils.ReadArray<short>(reader, width * height);
             map.Steps = reader.ReadBytes(width * height);
             map.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
+            //the first foundations' brick was the tool's, not the player's: they're concrete now, like new ones
+            if (revision < 2) Array.Clear(map.Pattern, 0, map.Pattern.Length);
             map.Refresh();
             return map;
         }
