@@ -375,7 +375,11 @@ namespace FSO.HIT
         {
             // Generated TS1 tracks are "play; loop" and rely on the Play Sound primitive's loop flag.
             // Without this, one-shot sounds (e.g. the paper carrier's whistle) repeat until the owner leaves.
-            if (thread.LoopSetByOwner && !thread.Loop) return HITResult.KILL;
+            if (thread.LoopSetByOwner && !thread.Loop)
+            {
+                FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + thread.Name + "' ends at its loop (doesn't loop; playing: " + thread.AnyNoteActive() + ").");
+                return HITResult.KILL;
+            }
             thread.PC = (uint)thread.LoopPointer;
             return HITResult.CONTINUE;
         }

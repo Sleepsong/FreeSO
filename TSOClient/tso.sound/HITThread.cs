@@ -103,6 +103,8 @@ namespace FSO.HIT
             if (InterruptBlocker != null) return !Dead;
             if (EverHadOwners && Owners.Count == 0)
             {
+                FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + Name + "' stopped: its owner stopped its sounds or went away ("
+                    + ((Notes.Count == 0) ? "before playing anything" : "playing: " + AnyNoteActive()) + ").");
                 KillVocals();
                 Dead = true;
                 return false;
@@ -306,6 +308,7 @@ namespace FSO.HIT
         public int NoteOn()
         {
             var sound = audContent.GetSFX(Patch);
+            TraceNote(sound);
 
             if (sound != null)
             {
@@ -347,6 +350,7 @@ namespace FSO.HIT
         public int NoteLoop() //todo, make loop again.
         {
             var sound = audContent.GetSFX(Patch);
+            TraceNote(sound);
 
             if (sound != null)
             {
@@ -386,6 +390,17 @@ namespace FSO.HIT
         /// </summary>
         /// <param name="note">The note to check.</param>
         /// <returns>True if active, false if not.</returns>
+        private void TraceNote(SoundEffect sound)
+        {
+            //a sound id with no sound file plays nothing, silently
+            if (Patch == null) FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + Name + "' asked for sound 0x"
+                + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ", which isn't in the sound data: nothing played.");
+            var trace = FSO.Content.TS1.TS1Audio.Trace;
+            if (trace == null) return;
+            if (Patch == null) trace("  '" + Name + "' has no sound for 0x" + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ": nothing played.");
+            else trace("  '" + Name + "' plays " + Patch.Filename + ((sound == null) ? " (couldn't load it)" : ""));
+        }
+
         /// <summary>Whether any of its notes is playing (or about to), for the sound log.</summary>
         public bool AnyNoteActive()
         {

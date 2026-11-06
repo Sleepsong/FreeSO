@@ -13,6 +13,8 @@ namespace FSO.SimAntics.Primitives
             var owner = (operand.Flags == 1)?context.StackObject:context.Caller;
             if (owner == null) return VMPrimitiveExitCode.GOTO_TRUE;
             var threads = owner.SoundThreads;
+            FSO.Content.TS1.TS1Audio.Trace?.Invoke("Stop All Sounds for " + (owner.Object?.OBJ?.ChunkLabel ?? "object") + " " + owner.ObjectID
+                + ((threads.Count == 0) ? ": none playing" : ": " + string.Join(", ", System.Linq.Enumerable.Select(threads, x => "'" + (x.Name ?? x.Sound.Name) + "'"))));
 
             for (int i = 0; i < threads.Count; i++)
             {
