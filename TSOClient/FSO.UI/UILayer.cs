@@ -341,6 +341,34 @@ namespace FSO.Client.UI
             if (TooltipProperties.UpdateDead) TooltipProperties.Show = false;
             if (Tooltip != null && TooltipProperties.Show) DrawTooltip(SBatch, TooltipProperties.Position, TooltipProperties.Opacity, TooltipProperties.Color);
             TooltipProperties.UpdateDead = true;
+
+            var overlay = OverlayText?.Invoke();
+            if (overlay != null) DrawOverlay(SBatch, overlay);
+        }
+
+        /// <summary>Optional text drawn over everything at the top centre of the screen (the frame rate counter).</summary>
+        public static Func<string> OverlayText;
+
+        private void DrawOverlay(SpriteBatch batch, string text)
+        {
+            var scaleUI = FSOEnvironment.DPIScaleFactor;
+            TextStyle style = TextStyle.DefaultLabel.Clone();
+            style.Color = Color.White;
+            style.Size = (int)(9 * scaleUI);
+            var size = style.MeasureString(text);
+            var width = (int)(size.X + 12 * scaleUI);
+            var height = (int)(16 * scaleUI);
+            var x = (int)(GlobalSettings.Default.GraphicsWidth * scaleUI - width) / 2;
+            var y = (int)(4 * scaleUI);
+            batch.Draw(TextureGenerator.GetPxWhite(batch.GraphicsDevice), new Rectangle(x, y, width, height), Color.Black * 0.6f);
+            var pos = new Vector2(x + 6 * scaleUI, y + (height - size.Y) / 2);
+            if (style.VFont != null)
+            {
+                batch.End();
+                style.VFont.Draw(batch.GraphicsDevice, text, pos, Color.White, new Vector2(style.Scale), null);
+                batch.Begin();
+            }
+            else batch.DrawString(style.SpriteFont, text, pos, Color.White, 0, Vector2.Zero, style.Scale, SpriteEffects.None, 0);
         }
 
         public void DrawTooltip(SpriteBatch batch, Vector2 position, float opacity, Color color)

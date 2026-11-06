@@ -61,6 +61,8 @@ namespace FSO.Client
             { "SmoothZoom", "true"},
             { "AntiAlias", "0"},
             { "EdgeScroll", "true"},
+            { "ShowFPS", "false"},
+            { "FastDepth2D", "true"},
             { "Lighting", "true"},
             { "FXVolume", "10"},
             { "MusicVolume", "10"},
@@ -136,6 +138,9 @@ namespace FSO.Client
         public bool SmoothZoom { get; set; }
         public int AntiAlias { get; set; }
         public bool EdgeScroll { get; set; }
+        public bool ShowFPS { get; set; }
+        /// <summary>Phones: draw the 2D view's depth in one pass where the GPU supports framebuffer fetch.</summary>
+        public bool FastDepth2D { get; set; }
         public bool Lighting { get; set; }
         public byte FXVolume { get; set; }
         public byte MusicVolume { get; set; }

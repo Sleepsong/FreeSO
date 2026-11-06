@@ -15,6 +15,7 @@ namespace FSO.LotView.Model
         private int CurrentRing = 0;
         private int HalfSeconds;
         private bool Dirty;
+        public static int ToStatic, ToDynamic; //moves, for performance logs
 
         public TimedDynamicStaticLayers(int halfSeconds)
         {
@@ -36,7 +37,7 @@ namespace FSO.LotView.Model
                 foreach (var obj in toClear)
                 {
                     //move objects in the dynamic layer back to static
-                    if (!obj.ForceDynamic)
+                    if (!obj.ForceDynamic && !obj.KeepDynamic)
                     {
                         MoveToStatic(obj);
                     }
@@ -78,6 +79,7 @@ namespace FSO.LotView.Model
             DynamicObjects.Remove(obj);
             StaticObjects.Add(obj);
             Dirty = true;
+            ToStatic++;
         }
 
         public void EnsureDynamic(ObjectComponent obj)
@@ -97,6 +99,7 @@ namespace FSO.LotView.Model
             StaticObjects.Remove(obj);
             DynamicObjects.Add(obj);
             Dirty = true;
+            ToDynamic++;
 
             Schedule[CurrentRing].Add(obj);
             obj.RenderInfo.DynamicRemoveCycle = CurrentRing;

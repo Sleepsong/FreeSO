@@ -44,12 +44,16 @@ namespace FSO.LotView
             return new Vector2((float)Math.Floor(pxOffset.X / scrollSize) * scrollSize, (float)Math.Floor(pxOffset.Y / scrollSize) * scrollSize);
         }
 
+        /// <summary>How many times the 2D static buffer (walls, floors, still objects) has been redrawn (for performance logs).</summary>
+        public static int Redraws;
+
         public void PreDraw(GraphicsDevice gd, WorldState state)
         {
             var changes = state.Changes;
             if (changes.DrawImmediate) return;
             if (changes.StaticSurfaceDirty)
             {
+                Redraws++;
                 var pxOffset = -state.WorldSpace.GetScreenOffset();
                 var newOff = GetScrollIncrement(pxOffset, state);
                 var oldCenter = state.CenterTile;

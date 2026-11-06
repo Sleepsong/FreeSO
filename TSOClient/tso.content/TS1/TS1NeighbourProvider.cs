@@ -81,7 +81,11 @@ namespace FSO.Content.TS1
 
                 // Normalize paths for comparison (remove trailing slashes, use consistent separators)
                 var normalizedSource = source.TrimEnd('/', '\\');
-                var normalizedDest = destination.TrimEnd('/', '\\');
+                var finalDest = destination.TrimEnd('/', '\\');
+                // copy to a temporary folder, then rename, so a copy is never left half done
+                var normalizedDest = finalDest + ".copying";
+                if (Directory.Exists(normalizedDest)) Directory.Delete(normalizedDest, true);
+                Directory.CreateDirectory(normalizedDest);
 
                 // Create directory structure
                 foreach (string dirPath in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
@@ -92,8 +96,12 @@ namespace FSO.Content.TS1
                 }
 
                 // Copy files with error handling
+                var copyTimer = System.Diagnostics.Stopwatch.StartNew(); // progress for the log
+                var copied = 0;
+                Console.WriteLine($"[load] copying {udName} from {source} to {destination}");
                 foreach (string srcPath in Directory.GetFiles(source, "*.*", SearchOption.AllDirectories))
                 {
+                    if (++copied % 200 == 0) Console.WriteLine($"[load] copied {copied} files ({copyTimer.ElapsedMilliseconds} ms)");
                     var relativePath = srcPath.Substring(normalizedSource.Length).TrimStart('\\', '/');
                     var destPath = Path.Combine(normalizedDest, relativePath);
                     try
@@ -105,10 +113,13 @@ namespace FSO.Content.TS1
                         throw; // Re-throw to show error dialog
                     }
                 }
+                Directory.Move(normalizedDest, finalDest);
+                Console.WriteLine($"[load] copied {copied} files in {copyTimer.ElapsedMilliseconds} ms");
                 
             }
             
             UserPath = userPath;
+            var readTimer = System.Diagnostics.Stopwatch.StartNew();
 
             MainResource = new IffFile(Path.Combine(UserPath, "Neighborhood.iff"));
             LotLocations = new IffFile(Path.Combine(UserPath, "LotLocations.iff"));
@@ -135,7 +146,9 @@ namespace FSO.Content.TS1
                 FamilyForHouse[(short)fam.HouseNumber] = fam;
             }
 
+            Console.WriteLine($"[load] neighbourhood files read: {readTimer.ElapsedMilliseconds} ms"); readTimer.Restart();
             LoadCharacters(true);
+            Console.WriteLine($"[load] characters: {readTimer.ElapsedMilliseconds} ms");
             //todo: manage avatar iffs here
         }
 

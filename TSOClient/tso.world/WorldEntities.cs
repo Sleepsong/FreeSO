@@ -87,9 +87,29 @@ namespace FSO.LotView
             _2d.OffsetTile(new Vector3());
             _2d.PrepareImmediate(Effects.WorldBatchTechniques.drawZSpriteDepthChannel);
 
-            foreach (var avatar in Blueprint.Avatars)
+            if (FSO.Common.FSOEnvironment.SoftwareDepth && state.CameraMode < CameraRenderMode._3D)
             {
-                if (avatar.Level <= state.Level) avatar.Draw(gd, state);
+                // 2D on phones: sprites can't write hardware depth there, only the packed depth image (software depth).
+                // So test Sims against that image (they'd otherwise show through anything in front of them), and
+                // write their depth into it, or objects drawn after them (live ones) paint over them.
+                effect.Parameters["SoftwareDepth"]?.SetValue(true);
+                FSO.Common.Utils.PPXDepthEngine.RenderPPXDepth(effect, true, (depthPass) =>
+                {
+                    FSO.Vitaboy.Avatar.DepthPass = depthPass;
+                    foreach (var avatar in Blueprint.Avatars)
+                    {
+                        if (avatar.Level <= state.Level) avatar.Draw(gd, state);
+                    }
+                });
+                FSO.Vitaboy.Avatar.DepthPass = false;
+                effect.Parameters["SoftwareDepth"]?.SetValue(false);
+            }
+            else
+            {
+                foreach (var avatar in Blueprint.Avatars)
+                {
+                    if (avatar.Level <= state.Level) avatar.Draw(gd, state);
+                }
             }
 
             gd.RasterizerState = RasterizerState.CullNone;
@@ -145,6 +165,9 @@ namespace FSO.LotView
             }
 
             _2d.EndImmediate();
+
+            // particles' shaders don't keep the depth image (draw buffer 1) intact
+            FSO.Common.Utils.PPXDepthEngine.EndFetch();
 
             //object particles are always dynamic
             if (!state.TransitioningToCity)

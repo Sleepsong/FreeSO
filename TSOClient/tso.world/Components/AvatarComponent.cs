@@ -207,7 +207,11 @@ namespace FSO.LotView.Components
                 var roomLights = blueprint?.RoomColors;
                 if (roomLights != null)
                 {
-                    var col = ((WorldConfig.Current.AdvancedLighting) ? new Vector4(1) : PowColorVec(roomLights[room].ToVector4(), 1 / 2.2f)) * baseCol.ToVector4();
+                    //basic lighting: special room ids (65533/65534, used for display avatars like the CAS carousel)
+                    //have no room colour, which would draw them fully transparent. Light them fully instead.
+                    var roomCol = roomLights[room];
+                    if (room >= 65533 || roomCol.A == 0) roomCol = Color.White;
+                    var col = ((WorldConfig.Current.AdvancedLighting) ? new Vector4(1) : PowColorVec(roomCol.ToVector4(), 1 / 2.2f)) * baseCol.ToVector4();
                     effect.Parameters["AmbientLight"].SetValue(col);
                 }
                 effect.Parameters["World"].SetValue(world);
@@ -240,6 +244,8 @@ namespace FSO.LotView.Components
                 DrawAvatarMesh(device, world, newWorld, col);
                 //world._3D.DrawMesh(newWorld, Avatar, (short)ObjectID, (Room>65530 || Room == 0)?Room:blueprint.Rooms[Room].Base, col, ALevel); 
             }
+
+            if (FSO.Vitaboy.Avatar.DepthPass) return; //software depth's second pass: only the body's depth
 
             if (Headline != null && !Headline.IsDisposed)
             {

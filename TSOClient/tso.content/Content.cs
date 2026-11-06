@@ -269,8 +269,10 @@ namespace FSO.Content
             var oldBase = BasePath;
             if (TS1)
             {
+                var scanTimer = System.Diagnostics.Stopwatch.StartNew();
                 _ScanFiles(TS1BasePath, ts1AllFiles, TS1BasePath);
                 TS1AllFiles = ts1AllFiles.ToArray();
+                Console.WriteLine($"[load] scanned {TS1AllFiles.Length} game files in {scanTimer.ElapsedMilliseconds} ms");
             }
 
             LoadProgress = ContentLoadingProgress.InitGlobal;
@@ -296,10 +298,15 @@ namespace FSO.Content
 
             if (TS1)
             {
+                var stepTimer = System.Diagnostics.Stopwatch.StartNew(); // load timings for the log
                 ((TS1AvatarTextureProvider)AvatarTextures)?.Init();
+                Console.WriteLine($"[load] avatar textures: {stepTimer.ElapsedMilliseconds} ms"); stepTimer.Restart();
                 ((TS1BMFProvider)AvatarMeshes)?.Init();
+                Console.WriteLine($"[load] avatar meshes: {stepTimer.ElapsedMilliseconds} ms"); stepTimer.Restart();
                 Jobs = new TS1JobProvider(TS1Global);
+                Console.WriteLine($"[load] jobs: {stepTimer.ElapsedMilliseconds} ms"); stepTimer.Restart();
                 Neighborhood = new TS1NeighborhoodProvider(this);
+                Console.WriteLine($"[load] neighbourhood: {stepTimer.ElapsedMilliseconds} ms");
             } else
             {
                 if (Mode == ContentMode.CLIENT) AvatarHandgroups.Init();

@@ -145,6 +145,7 @@ namespace FSO.LotView.Utils
         {
             foreach (var buffer in Buffers)
             {
+                PPXDepthEngine.ReleaseInherited(buffer);
                 buffer.Dispose();
             }
             Buffers.Clear();
@@ -184,6 +185,12 @@ namespace FSO.LotView.Utils
                     (AlwaysDS[i] || (!FSOEnvironment.UseMRT && !FSOEnvironment.SoftwareDepth)) ? depthformat : DepthFormat.None)
                 );
             }
+            if (FSOEnvironment.SoftwareDepth)
+            {
+                //software depth: each colour buffer's depth buffer shares its stencil (see PPXDepthEngine.InheritDepthStencil)
+                if (Buffers.Count > BUFFER_STATIC_DEPTH) PPXDepthEngine.InheritDepthStencil(Buffers[BUFFER_STATIC_DEPTH], Buffers[BUFFER_STATIC]);
+                if (Buffers.Count > BUFFER_THUMB_DEPTH) PPXDepthEngine.InheritDepthStencil(Buffers[BUFFER_THUMB_DEPTH], Buffers[BUFFER_THUMB]);
+            }
         }
         
         public _2DSprite NewSprite(_2DBatchRenderMode mode)
@@ -219,12 +226,15 @@ namespace FSO.LotView.Utils
             int i = 0;
             while (!added)
             {
-                if (i >= Sprites.Count) { Sprites.Add(new _2DSpriteGroup(FSOEnvironment.SoftwareDepth)); }
-                if (FSOEnvironment.SoftwareDepth && Sprites[i].SprRectangles.SearchForIntersect(sprite.AbsoluteDestRect))
+                // two-pass software depth can't let sprites in one batch overlap (they'd read the depth image while it's
+                // written); with framebuffer fetch the GPU orders overlapping fragments, so everything goes in one batch
+                var splitOverlaps = FSOEnvironment.SoftwareDepth && !FSOEnvironment.FramebufferFetch;
+                if (i >= Sprites.Count) { Sprites.Add(new _2DSpriteGroup(splitOverlaps)); }
+                if (splitOverlaps && Sprites[i].SprRectangles.SearchForIntersect(sprite.AbsoluteDestRect))
                     i++; //intersects with a sprite in this list. advance to next.
                 else
                 {
-                    if (FSOEnvironment.SoftwareDepth) Sprites[i].SprRectangles.Add(sprite.AbsoluteDestRect);
+                    if (splitOverlaps) Sprites[i].SprRectangles.Add(sprite.AbsoluteDestRect);
                     Sprites[i].Sprites[sprite.RenderMode].Add(sprite);
                     added = true;
                 }
@@ -802,6 +812,7 @@ namespace FSO.LotView.Utils
             SpriteIndices.Dispose();
             foreach (var buf in Buffers)
             {
+                PPXDepthEngine.ReleaseInherited(buf);
                 buf.Dispose();
             }
         }

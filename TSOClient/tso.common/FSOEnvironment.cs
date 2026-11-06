@@ -16,6 +16,11 @@ namespace FSO.Common
         /// True if system does not support gl_FragDepth (eg. iOS). Uses alternate pipeline that abuses stencil buffer.
         /// </summary>
         public static bool SoftwareDepth = false;
+        /// <summary>
+        /// Software depth in one pass (phones with GL_EXT_shader_framebuffer_fetch): the 2D world shaders read the depth
+        /// image as a second draw buffer instead of a colour pass, a stencil and a depth pass per sprite group.
+        /// </summary>
+        public static bool FramebufferFetch = false;
         public static int GLVer = 3;
         public static float UIZoomFactor = 1f;
         public static float DPIScaleFactor = 1;

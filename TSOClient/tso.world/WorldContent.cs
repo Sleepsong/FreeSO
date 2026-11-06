@@ -25,7 +25,10 @@ namespace FSO.LotView
 
         public static void LoadEffects(bool reload)
         {
-            _2DWorldBatchEffect = new WorldBatchEffect(ContentManager.Load<Effect>("Effects/2DWorldBatch" + EffectSuffix));
+            // phones with framebuffer fetch: the same shaders, made to test and write depth in one pass
+            _2DWorldBatchEffect = new WorldBatchEffect(ContentManager.Load<Effect>(FSOEnvironment.FramebufferFetch ? "Effects/2DWorldBatchFetch" : ("Effects/2DWorldBatch" + EffectSuffix)));
+            FSO.Common.Utils.PPXDepthEngine.FetchEffects.Clear();
+            if (FSOEnvironment.FramebufferFetch) FSO.Common.Utils.PPXDepthEngine.FetchEffects.Add(_2DWorldBatchEffect);
             Grad2DEffect = new GradEffect(ContentManager.Load<Effect>("Effects/gradpoly2D"));
             Light2DEffect = new LightMap2DEffect(ContentManager.Load<Effect>("Effects/LightMap2D"));
             GrassEffect = new GrassEffect(ContentManager.Load<Effect>("Effects/GrassShader" + EffectSuffix));

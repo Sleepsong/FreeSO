@@ -12,6 +12,28 @@ namespace FSO.LotView
         public bool Subworld = false;
         public TimedDynamicStaticLayers Layers = new TimedDynamicStaticLayers(5);
 
+        // why the cached 2D image was marked for redrawing (for performance logs)
+        private static readonly string[] StaticReasonNames = { "view", "scroll", "light", "walls", "rooms", "second draw", "objects added/removed", "objects live/still", "many objects moved" };
+        private static int[] StaticReasons = new int[9];
+        private void MarkStatic(int reason)
+        {
+            StaticSurfaceDirty = true;
+            StaticReasons[reason]++;
+        }
+        /// <summary>The reasons the cached 2D image was marked dirty since the last call, e.g. "scroll 2, objects live/still 5".</summary>
+        public static string TakeStaticReasons()
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < StaticReasons.Length; i++)
+            {
+                if (StaticReasons[i] > 0) parts.Add(StaticReasonNames[i] + " " + StaticReasons[i]);
+                StaticReasons[i] = 0;
+            }
+            parts.Add($"to live {TimedDynamicStaticLayers.ToDynamic}, back {TimedDynamicStaticLayers.ToStatic}");
+            TimedDynamicStaticLayers.ToDynamic = TimedDynamicStaticLayers.ToStatic = 0;
+            return string.Join(", ", parts);
+        }
+
         public HashSet<ObjectComponent> DynamicObjects => Layers.DynamicObjects;
         public HashSet<ObjectComponent> StaticObjects => Layers.StaticObjects;
 
@@ -42,6 +64,7 @@ namespace FSO.LotView
         }
 
         public double LastTimeOfDay = -99999;
+        private long LastOutdoorsRedraw;
 
         public void PreDraw(GraphicsDevice gd, WorldState state)
         {
@@ -52,7 +75,20 @@ namespace FSO.LotView
             }
             if (state.CameraMode > CameraRenderMode._2D) DrawImmediate = true;
 
-            if (Math.Abs(Blueprint.OutsideTime - LastTimeOfDay) > 0.001f)
+            var timeChange = Math.Abs(Blueprint.OutsideTime - LastTimeOfDay);
+            bool outdoorsChanged;
+            if (FSO.Common.FSOEnvironment.SoftwareDepth && state.CameraMode < CameraRenderMode._3D)
+            {
+                // 2D with software depth (phones): an outdoor light change redraws the whole static buffer, which
+                // costs a few hundred ms there, so update it every 15 game minutes and at most every 8 seconds,
+                // instead of every 1.4 game minutes (about every 1.5 s at normal speed). Big jumps (loading, an
+                // hour or more) still update straight away.
+                var now = Environment.TickCount64;
+                outdoorsChanged = timeChange > (1 / 24f) || (timeChange > (1 / 96f) && now - LastOutdoorsRedraw > 8000);
+                if (outdoorsChanged) LastOutdoorsRedraw = now;
+            }
+            else outdoorsChanged = timeChange > 0.001f;
+            if (outdoorsChanged)
             {
                 Dirty |= BlueprintGlobalChanges.OUTDOORS_LIGHTING_CHANGED;
                 LastTimeOfDay = Blueprint.OutsideTime;
@@ -62,7 +98,7 @@ namespace FSO.LotView
             {
                 if ((Dirty & BlueprintGlobalChanges.VIEW_CHANGE_2D) > 0)
                 {
-                    StaticSurfaceDirty = true;
+                    MarkStatic(0);
                     Dirty |= BlueprintGlobalChanges.WALL_CHANGED;
                     Dirty |= BlueprintGlobalChanges.FLOOR_CHANGED;
                     if ((Dirty & BlueprintGlobalChanges.ROTATE) > 0)
@@ -80,7 +116,7 @@ namespace FSO.LotView
                     var pxOffset = -state.WorldSpace.GetScreenOffset();
                     if (StaticSurface == null || StaticSurface.PxOffset != StaticSurface.GetScrollIncrement(pxOffset, state))
                     {
-                        StaticSurfaceDirty = true;
+                        MarkStatic(1);
                     }
                 }
                 if ((Dirty & BlueprintGlobalChanges.PRECISE_ZOOM) > 0)
@@ -90,7 +126,7 @@ namespace FSO.LotView
 
                 if ((Dirty & BlueprintGlobalChanges.LIGHTING_UNIMPORTANT) > 0)
                 {
-                    StaticSurfaceDirty = true;
+                    MarkStatic(2);
                 }
 
                 if ((Dirty & BlueprintGlobalChanges.LIGHTING_ANY) > 0)
@@ -133,7 +169,7 @@ namespace FSO.LotView
                     }
 
                     TicksSinceLight = 0;
-                    StaticSurfaceDirty = true;
+                    MarkStatic(2);
                 }
 
                 var wallFlags = (Dirty & (BlueprintGlobalChanges.WALL_CHANGED | BlueprintGlobalChanges.WALL_CUT_CHANGED));
@@ -141,7 +177,7 @@ namespace FSO.LotView
                 {
                     //process wall changes
                     state.Platform.RecacheWalls(gd, state, wallFlags == BlueprintGlobalChanges.WALL_CUT_CHANGED);
-                    StaticSurfaceDirty = true;
+                    MarkStatic(3);
                 }
 
                 if ((Dirty & BlueprintGlobalChanges.ROOF_STYLE_CHANGED) > 0)
@@ -170,13 +206,13 @@ namespace FSO.LotView
                         Blueprint.RoofComp.ShapeDirty = true;
                     }
 
-                    StaticSurfaceDirty = true;
+                    MarkStatic(4);
                 }
 
                 if ((Dirty & (BlueprintGlobalChanges.OPENGL_SECOND_DRAW)) > 0)
                 {
                     //must redraw to avoid issues with floors
-                    StaticSurfaceDirty = true;
+                    MarkStatic(5);
                 }
             }
             Dirty = 0;
@@ -187,21 +223,28 @@ namespace FSO.LotView
             }
 
             //for moved objects, regenerate depth and move them to dynamic if they aren't already there.
+            // On phones (software depth) dynamic objects are expensive to draw every frame, and when a lot loads every
+            // object is moved into place at once, which made them all dynamic for a few seconds. When many move
+            // together, keep the static ones static and redraw the static buffer once instead.
+            var bulkMove = FSO.Common.FSOEnvironment.SoftwareDepth && ObjectMoved.Count > 32;
+            var bulkStatic = false;
             foreach (var obj in ObjectMoved)
             {
                 if (obj.Dead) continue;
                 obj.UpdateDrawOrder(state);
-                Layers.EnsureDynamic(obj);
+                if (bulkMove && obj.RenderInfo.Layer == WorldObjectRenderLayer.STATIC) bulkStatic = true;
+                else Layers.EnsureDynamic(obj);
             }
+            if (bulkStatic) MarkStatic(8);
             StaticObjectDirty = ObjectSetDirty;
             ObjectSetDirty = false;
-            if (StaticObjectDirty) StaticSurfaceDirty = true;
+            if (StaticObjectDirty) MarkStatic(6);
             ObjectMoved.Clear();
 
             if (Layers.Update())
             {
                 //static buffer is dirty.
-                StaticSurfaceDirty = true;
+                MarkStatic(7);
             }
         }
 
@@ -247,7 +290,7 @@ namespace FSO.LotView
             if ((Dirty & BlueprintGlobalChanges.WALL_CHANGED) > 0)
             {
                 state.Platform.RecacheWalls(gd, state, false);
-                StaticSurfaceDirty = true;
+                MarkStatic(3);
                 Dirty &= ~BlueprintGlobalChanges.WALL_CHANGED;
             }
         }

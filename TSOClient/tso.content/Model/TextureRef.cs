@@ -138,6 +138,8 @@ namespace FSO.Content.Model
             {
                 if (_Instance == null || _Instance.IsDisposed) //|| ((CachableTexture2D)result).BeingDisposed)
                 {
+                    var loadStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                    Loads++;
                     using (var stream = GetStream())
                     {
                         if (Thread.CurrentThread == FSOEnvironment.GameThread)
@@ -167,10 +169,15 @@ namespace FSO.Content.Model
                     {
                     _Instance.Tag = this; //form a destiny bond with the texture
                     }
+                    LoadTicks += System.Diagnostics.Stopwatch.GetTimestamp() - loadStart;
                 }
                 return _Instance;
             }
         }
+
+        /// <summary>Textures decoded and uploaded on first use, and the time spent (for performance logs).</summary>
+        public static int Loads;
+        public static long LoadTicks;
 
         public static Func<Stream, AbstractTextureRef, TexBitmap> ImageFetchFallback;
 

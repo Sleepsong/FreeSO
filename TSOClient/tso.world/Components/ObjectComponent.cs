@@ -430,11 +430,21 @@ namespace FSO.LotView.Components
             return current;
         }
 
+        /// <summary>
+        /// Set each update while this object is sent to the dynamic layer every frame (a headline, or hiding for dynamic
+        /// cutaway). The static layer manager then keeps it dynamic instead of moving it back to static after a few
+        /// seconds, which made it bounce back next frame: two redraws of the 2D static buffer every few seconds per
+        /// object (cheap on a PC, a few hundred ms each on phones).
+        /// </summary>
+        public bool KeepDynamic;
+
         public override void Update(GraphicsDevice device, WorldState world)
         {
+            KeepDynamic = false;
             if (Headline != null)
             {
                 //todo: this and hideForCutaway should be part of the ForceDynamic bool (accessed by the static layer manager)
+                KeepDynamic = true;
                 if (blueprint != null && RenderInfo.Layer == WorldObjectRenderLayer.STATIC) blueprint.Changes.RegisterObjectChange(this);
             }
 
@@ -454,6 +464,7 @@ namespace FSO.LotView.Components
             {
                 if (!(world.BuildMode > 1) && world.DynamicCutaway && Level == world.Level)
                 {
+                    KeepDynamic = true;
                     if (blueprint != null && RenderInfo.Layer == WorldObjectRenderLayer.STATIC) blueprint.Changes.RegisterObjectChange(this);
                 }
 

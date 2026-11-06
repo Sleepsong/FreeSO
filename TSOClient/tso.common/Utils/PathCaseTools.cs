@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -9,45 +10,44 @@ namespace FSO.Common.Utils
         /// <summary>
         /// Resolves a file path case-insensitively on Linux/macOS.
         /// On Windows, simply checks if the file exists.
+        /// (The file as written is tried first, and the case-insensitive search starts from the
+        /// deepest folder that exists as written, since folders above the app's storage, like /storage/emulated on
+        /// Android, can't be listed.)
         /// </summary>
         public static string Insensitive(string file)
         {
             if (string.IsNullOrEmpty(file))
                 return null;
 
-            // On Windows, file system is case-insensitive, just check existence
+            // as written (and any case-insensitive file system, like Windows or Android's shared storage)
+            if (File.Exists(file))
+                return file;
             if (OperatingSystem.IsWindows())
-                return File.Exists(file) ? file : null;
+                return null;
 
             file = file.Replace('\\', '/');
 
-            string[] parts;
-            string resolved;
-
-            if (file.StartsWith("/"))
+            // the parts below the deepest folder that exists as written are matched ignoring case
+            var rest = new Stack<string>();
+            rest.Push(Path.GetFileName(file));
+            var dir = Path.GetDirectoryName(file);
+            while (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
-                parts = file.Substring(1).Split('/');
-                resolved = "/";
+                rest.Push(Path.GetFileName(dir));
+                dir = Path.GetDirectoryName(dir);
             }
-            else
-            {
-                parts = file.Split('/');
-                resolved = "";
-            }
+            var resolved = string.IsNullOrEmpty(dir) ? "." : dir;
 
-            foreach (var part in parts)
+            foreach (var part in rest)
             {
                 if (string.IsNullOrEmpty(part))
                     continue;
-
-                var searchPath = string.IsNullOrEmpty(resolved) ? "." : resolved;
-
-                if (!Directory.Exists(searchPath))
+                if (!Directory.Exists(resolved))
                     return null;
 
                 try
                 {
-                    var entries = Directory.GetFileSystemEntries(searchPath);
+                    var entries = Directory.GetFileSystemEntries(resolved);
                     var match = entries.FirstOrDefault(e =>
                         Path.GetFileName(e).Equals(part, StringComparison.OrdinalIgnoreCase));
 

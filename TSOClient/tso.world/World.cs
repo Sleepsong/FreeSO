@@ -815,6 +815,24 @@ namespace FSO.LotView
             return tMin;
         }
 
+        /// <summary>
+        /// Converts a position on screen (pixels) to the matching position in the world's image, which is what picking
+        /// (GetObjectIDAtScreenPos, EstTileAtPosWithScroll) expects. The image can be drawn magnified about the screen
+        /// centre (BackbufferScale, the 2D zoom), so a tap away from the centre is nearer to it in the image.
+        /// </summary>
+        public Vector2 ScreenToWorldPx(Vector2 screen)
+        {
+            if (BackbufferScale == 1 || !UseBackbuffer) return screen;
+            var center = PPXDepthEngine.GetWidthHeight().ToVector2() / (2f * PPXDepthEngine.SSAA);
+            return center + (screen - center) / BackbufferScale;
+        }
+
+        public short GetObjectIDAtScreenTap(Point screen, GraphicsDevice gd)
+        {
+            var px = ScreenToWorldPx(screen.ToVector2());
+            return GetObjectIDAtScreenPos((int)px.X, (int)px.Y, gd);
+        }
+
         public Vector2 EstTileAtPosWithScroll(Vector2 pos, sbyte level = -1)
         {
             if (level == -1) level = State.Level;

@@ -24,6 +24,8 @@ namespace FSO.Vitaboy
         // DEBUG: Set to true to force censorship on ALL body parts for testing
         // This will make ALL avatars show the mosaic blur - just for testing!
         public static bool FORCE_CENSOR_TEST = false;
+        /// <summary>Set while drawing avatars' depth (software depth): skip the censor overlay, which isn't depth.</summary>
+        public static bool DepthPass;
 
         private static void InitLog()
         {
@@ -473,7 +475,7 @@ namespace FSO.Vitaboy
                 }
 
                 // If censorship is active, draw mosaic overlay at pelvis position
-                if (showCensorBlur)
+                if (showCensorBlur && !DepthPass)
                 {
                     DrawCensoredMeshesPixelated(device, effect, censorshipFlags);
                 }
