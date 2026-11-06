@@ -467,7 +467,7 @@ namespace FSO.LotView.Components
             }
             else _IdleFramesPct = 0;
 
-            if (HideForCutaway && Level > 0)
+            if (HideForCutaway && Level >= 0) //(the basement's doors too)
             {
                 if (!(world.BuildMode > 1) && world.DynamicCutaway && Level == world.Level)
                 {

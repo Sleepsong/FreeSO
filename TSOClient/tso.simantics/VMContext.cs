@@ -1201,7 +1201,7 @@ namespace FSO.SimAntics
             VMPlacementError status = VMPlacementError.Success;
             VMEntity statusObj = null;
 
-            if (footprint == null || pos.Level < 1)
+            if (footprint == null || pos.Level < 0) //(level 0 is the basement: things collide there too)
             {
                 return new VMPlacementResult(status);
             }
@@ -1255,7 +1255,7 @@ namespace FSO.SimAntics
             VMPlacementError status = (noFloor)?VMPlacementError.HeightNotAllowed:VMPlacementError.Success;
             VMEntity statusObj = null;
 
-            if (footprint == null || pos.Level < 1)
+            if (footprint == null || pos.Level < 0) //(level 0 is the basement: things collide there too)
             {
                 return new VMPlacementResult { Status = status };
             }
@@ -1319,7 +1319,7 @@ namespace FSO.SimAntics
         {
             if (pos.TileX < 0 || pos.TileX >= _Arch.Width) return 0;
             else if (pos.TileY < 0 || pos.TileY >= _Arch.Height) return 0;
-            else if (pos.Level < 1 || pos.Level > _Arch.Stories) return 0;
+            else if (pos.Level < 0 || pos.Level > _Arch.Stories) return 0; //(level 0 is the basement)
             else
             {
                 uint tileRoom = Architecture.Rooms[pos.Level - 1].Map[pos.TileX + pos.TileY * _Arch.Width];
