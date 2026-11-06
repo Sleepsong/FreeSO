@@ -180,6 +180,7 @@ namespace FSO.LotView.Components
                                         break;
                                 }
 
+                                if (comp.TopLeftHalf) { styleID = FSO.Content.WorldWallProvider.HalfWallStyle; overlayID = 0; } //always low: no cut slopes
                                 var tlStyle = GetStyle(styleID);
 
                                 var _Sprite = GetWallSprite(tlPattern, tlStyle, 0, down, world);
@@ -322,6 +323,7 @@ namespace FSO.LotView.Components
                                         break;
                                 }
 
+                                if (comp.TopRightHalf) { styleID = FSO.Content.WorldWallProvider.HalfWallStyle; overlayID = 0; } //always low: no cut slopes
                                 var trStyle = GetStyle(styleID);
 
                                 var _Sprite = GetWallSprite(trPattern, trStyle, 1, down, world);
@@ -461,6 +463,7 @@ namespace FSO.LotView.Components
                                         break;
                                 }
 
+                                if (comp.TopRightHalf) { styleID = FSO.Content.WorldWallProvider.HalfWallStyle; overlayID = 0; } //always low: no cut slopes
                                 var trStyle = GetStyle(styleID);
                                 
                                 int roomSide = 16-((((int)world.Rotation+1)/2)%2) * 16;
@@ -509,6 +512,7 @@ namespace FSO.LotView.Components
                                         break;
                                 }
 
+                                if (comp.TopRightHalf) { styleID = FSO.Content.WorldWallProvider.HalfWallStyle; overlayID = 0; } //always low: no cut slopes
                                 var trStyle = GetStyle(styleID);
 
                                 int roomSide = ((int)world.Rotation / 2) * 16;
@@ -756,7 +760,7 @@ namespace FSO.LotView.Components
                     }
                 }
 
-                if (wall.Segments == WallSegments.VerticalDiag && (wall.TopRightStyle == 1 || wall.TopRightStyle == 255))
+                if (wall.Segments == WallSegments.VerticalDiag && WallTile.IsThickStyle(wall.TopRightStyle))
                 {
                     if (result.TRCut > 0)
                     {
@@ -769,7 +773,7 @@ namespace FSO.LotView.Components
                         if (x < width && y < height && DownJunctions.Length> off + 1 + width) UpJunctions[off + 1 + width] |= JunctionFlags.DiagTop;
                     }
                 }
-                else if (wall.Segments == WallSegments.HorizontalDiag && (wall.TopRightStyle == 1 || wall.TopRightStyle == 255))
+                else if (wall.Segments == WallSegments.HorizontalDiag && WallTile.IsThickStyle(wall.TopRightStyle))
                 {
                     if (result.TRCut > 0)
                     {

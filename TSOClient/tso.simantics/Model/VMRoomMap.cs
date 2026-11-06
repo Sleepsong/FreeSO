@@ -159,25 +159,25 @@ namespace FSO.SimAntics.Model
                         if ((mainWalls.Segments & WallSegments.TopLeft) > 0)
                         {
                             if (!mainWalls.TopLeftDoor) wallObs.Add(new VMObstacle(obsX - 3, obsY - 3, obsX + 6, obsY + 19));
-                            if (mainWalls.TopLeftThick) wallLines?.AddLine(obsX, obsY, 0);
+                            if (mainWalls.TopLeftThick && !mainWalls.TopLeftHalf) wallLines?.AddLine(obsX, obsY, 0);
                             else fenceLines?.AddLine(obsX, obsY, 0);
                         }
                         if ((mainWalls.Segments & WallSegments.TopRight) > 0)
                         {
                             if (!mainWalls.TopRightDoor) wallObs.Add(new VMObstacle(obsX - 3, obsY - 3, obsX + 19, obsY + 6));
-                            if (mainWalls.TopRightThick) wallLines?.AddLine(obsX, obsY, 1);
+                            if (mainWalls.TopRightThick && !mainWalls.TopRightHalf) wallLines?.AddLine(obsX, obsY, 1);
                             else fenceLines?.AddLine(obsX, obsY, 1);
                         }
                         if ((mainWalls.Segments & WallSegments.BottomLeft) > 0)
                         {
                             if (!PYWalls.TopRightDoor) wallObs.Add(new VMObstacle(obsX - 3, obsY + 13, obsX + 19, obsY + 19));
-                            if (PYWalls.TopRightThick) wallLines?.AddLine(obsX, obsY+16, 1);
+                            if (PYWalls.TopRightThick && !PYWalls.TopRightHalf) wallLines?.AddLine(obsX, obsY+16, 1);
                             else fenceLines?.AddLine(obsX, obsY + 16, 1);
                         }
                         if ((mainWalls.Segments & WallSegments.BottomRight) > 0)
                         {
                             if (!PXWalls.TopLeftDoor) wallObs.Add(new VMObstacle(obsX + 13, obsY - 3, obsX + 19, obsY + 19));
-                            if (PXWalls.TopLeftThick) wallLines?.AddLine(obsX + 16, obsY, 0);
+                            if (PXWalls.TopLeftThick && !PXWalls.TopLeftHalf) wallLines?.AddLine(obsX + 16, obsY, 0);
                             else fenceLines?.AddLine(obsX + 16, obsY, 0);
                         }
 
