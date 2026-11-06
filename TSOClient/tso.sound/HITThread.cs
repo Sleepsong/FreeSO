@@ -386,6 +386,13 @@ namespace FSO.HIT
         /// </summary>
         /// <param name="note">The note to check.</param>
         /// <returns>True if active, false if not.</returns>
+        /// <summary>Whether any of its notes is playing (or about to), for the sound log.</summary>
+        public bool AnyNoteActive()
+        {
+            for (int i = 0; i < Notes.Count; i++) if (NoteActive(i)) return true;
+            return false;
+        }
+
         public bool NoteActive(int note)
         {
             if (note == -1 || note >= Notes.Count) return false;

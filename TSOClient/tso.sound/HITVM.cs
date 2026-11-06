@@ -177,7 +177,16 @@ namespace FSO.HIT
                     {
                         InterruptBlocker = (aevt as HITThread);
                     }
-                    else return aevt; //an event of this type is already alive - here, take it.
+                    else
+                    {
+                        if (FSO.Content.TS1.TS1Audio.Trace != null)
+                        {
+                            var t = aevt as HITThread;
+                            FSO.Content.TS1.TS1Audio.Trace("  '" + evt + "' is already alive: given that one"
+                                + ((t != null) ? " (alive " + (t.TickN / 60) + "s, playing: " + t.AnyNoteActive() + (t.Paused ? ", paused" : "") + ")" : "") + ".");
+                        }
+                        return aevt; //an event of this type is already alive - here, take it.
+                    }
                 }
             }
 
