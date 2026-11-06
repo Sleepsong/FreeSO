@@ -122,10 +122,16 @@ namespace FSO.HIT
         {
             if (Content.Content.Get().TS1)
             {
-                //dunno why this is ts1 specific, but whatever
-                //need to remap from the call id to the function offset
-
-                thread.ResGroup.hot.TrackData.TryGetValue(id, out id);
+                //TS1 names a routine it calls by id, which the .hot's TrackData (or the .hit's own entry points) maps to
+                //its address; other targets, like branches within a routine, are addresses already. This was
+                //TryGetValue(id, out id), which sets an id it doesn't know to 0: the start of the .hit file, so such a
+                //jump ran the file's header as code, and the sound (a Sim's voice lines, the bed) played nothing.
+                if (thread.ResGroup.hot.TrackData.TryGetValue(id, out var mapped)) return mapped;
+                var entryPoints = thread.ResGroup.hit?.EntryPointByTrackID;
+                if (entryPoints != null && entryPoints.TryGetValue(id, out mapped)) return mapped;
+                if (thread.ResGroup.hit?.Data != null && id >= thread.ResGroup.hit.Data.Length)
+                    FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + thread.Name + "' jumps to 0x" + id.ToString("X8")
+                        + ", which is neither a routine it knows nor an address in its .hit file: it stops there.");
             }
             return id;
         }

@@ -264,6 +264,8 @@ namespace FSO.HIT
                 {
                     var thread = new HITThread(evtent.ResGroup, this);
                     thread.PC = SubroutinePointer;
+                    FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + evt + "' runs its sound script from 0x" + SubroutinePointer.ToString("X")
+                        + " (track 0x" + TrackID.ToString("X8") + ").");
                     thread.LoopPointer = (int)thread.PC;
                     if (TrackID != 0) thread.SetTrack(TrackID, evtent.TrackID);
                     Sounds.Add(thread);
