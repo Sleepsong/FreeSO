@@ -321,6 +321,7 @@ namespace FSO.Files.RC
 
         private void CompleteFSOMLoad(GraphicsDevice gd)
         {
+            BuildBasinMask(UnloadedGeoms.SelectMany(x => x), gd);
             foreach (var group in UnloadedGeoms)
             {
                 var d = new Dictionary<Texture2D, DGRP3DGeometry>();
@@ -341,7 +342,7 @@ namespace FSO.Files.RC
                 Geoms.Add(d);
             }
 
-            DepthMask?.CompleteFSOMLoad(gd);
+            if (MaskType != DGRP3DMaskType.Basin) DepthMask?.CompleteFSOMLoad(gd); //a basin mask is already complete
         }
 
         public string SaveDirectory;
@@ -785,6 +786,7 @@ namespace FSO.Files.RC
         {
             Bounds = (BoundPts.Count == 0) ? new BoundingBox() : BoundingBox.CreateFromPoints(BoundPts);
             BoundPts = null;
+            BuildBasinMask(Geoms.SelectMany(x => x.Values), gd);
             SaveAsync(this);
             foreach (var g in Geoms)
                 foreach (var e in g)
@@ -830,8 +832,10 @@ namespace FSO.Files.RC
                     }
                 }
 
-                io.WriteInt32((int)MaskType);
-                if (DepthMask != null)
+                //a basin mask is made from the mesh each time it loads, and isn't saved
+                var savedMask = (MaskType == DGRP3DMaskType.Basin) ? DGRP3DMaskType.None : MaskType;
+                io.WriteInt32((int)savedMask);
+                if (savedMask != DGRP3DMaskType.None && DepthMask != null)
                 {
                     DepthMask.Save(io);
                 }
@@ -897,6 +901,44 @@ namespace FSO.Files.RC
             }
         }
 
+        /// <summary>
+        /// Objects set into a counter (sinks) reach below their base, and in 3D the counter top, drawn first, hides that
+        /// part: the basin was filled with countertop. TSO's sinks have depth masks made by hand for this; TS1's have
+        /// none. With no mask of its own, a mesh with parts below its base gets a lid over them: those triangles,
+        /// raised to just above the base. Drawn first, the lid clears the depth of whatever it covers (only when the
+        /// object is in a container, see DGRPRenderer), so the basin can be drawn into the counter. In mesh units, y is up
+        /// and 0 is the object's base (its slot, on a counter).
+        /// </summary>
+        private void BuildBasinMask(IEnumerable<DGRP3DGeometry> geoms, GraphicsDevice gd)
+        {
+            if (DepthMask != null || gd == null) return;
+            const float below = -0.02f; //how far below its base a vertex has to be to count
+            const float lid = 0.04f; //how far above its base the lid is
+            var verts = new List<DGRP3DVert>();
+            var indices = new List<int>();
+            foreach (var geom in geoms)
+            {
+                var sv = geom?.SVerts;
+                var si = geom?.SIndices;
+                if (sv == null || si == null) continue;
+                for (int i = 0; i + 2 < si.Count; i += 3)
+                {
+                    var a = sv[si[i]].Position; var b = sv[si[i + 1]].Position; var c = sv[si[i + 2]].Position;
+                    if (a.Y >= below && b.Y >= below && c.Y >= below) continue;
+                    foreach (var p in new[] { a, b, c })
+                    {
+                        indices.Add(verts.Count);
+                        verts.Add(new DGRP3DVert(new Vector3(p.X, Math.Max(p.Y, 0) + lid, p.Z), Vector3.Up, Vector2.Zero));
+                    }
+                }
+            }
+            if (indices.Count == 0) return;
+            var mask = new DGRP3DGeometry() { SVerts = verts, SIndices = indices };
+            mask.SComplete(gd);
+            DepthMask = mask;
+            MaskType = DGRP3DMaskType.Basin;
+        }
+
         public void IncrementDataRef()
         {
             foreach (var geom in Geoms)
@@ -932,6 +974,8 @@ namespace FSO.Files.RC
     {
         None = 0,
         Normal = 1,
-        Portal = 2
+        Portal = 2,
+        /// <summary>Made from the mesh: a lid over the parts below its base (a sink's basin, set into a counter).</summary>
+        Basin = 3
     }
 }

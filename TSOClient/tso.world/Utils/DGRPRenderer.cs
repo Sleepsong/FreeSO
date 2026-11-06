@@ -40,6 +40,8 @@ namespace FSO.LotView.Utils
         //3d cache
         private DGRP3DMesh Mesh;
         public Matrix World;
+        /// <summary>Whether the object is in another object (a sink in a counter): only then is a basin mask used.</summary>
+        public bool InObject;
         
         public DGRPRenderer(DGRP group, OBJD source)
         {
@@ -285,7 +287,34 @@ namespace FSO.LotView.Utils
             effect.Level = (float)(Level - 0.999f);
             var advDir = WorldConfig.Current.Directional && WorldConfig.Current.AdvancedLighting;
 
-            if (Mesh.DepthMask != null)
+            if (Mesh.DepthMask != null && Mesh.MaskType == DGRP3DMaskType.Basin)
+            {
+                var geom = Mesh.DepthMask;
+                if (InObject && geom.Verts != null)
+                {
+                    //mark where the lid is in front of what's drawn (the counter top, not a Sim in front of it), then clear
+                    //the depth there, so the basin below it can be drawn
+                    var lastRaster = device.RasterizerState;
+                    device.RasterizerState = RasterizerState.CullNone;
+                    effect.SetTechnique(RCObjectTechniques.DepthClear);
+                    effect.CurrentTechnique.Passes[0].Apply();
+                    device.DepthStencilState = BasinMark;
+                    device.Indices = geom.Indices;
+                    device.SetVertexBuffer(geom.Verts);
+                    device.BlendState = NoColor;
+                    device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, geom.PrimCount);
+
+                    device.DepthStencilState = DepthClear2;
+                    effect.CurrentTechnique.Passes[1].Apply();
+                    device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, geom.PrimCount);
+
+                    device.DepthStencilState = DepthStencilState.Default;
+                    device.BlendState = BlendState.NonPremultiplied;
+                    device.RasterizerState = lastRaster;
+                    effect.SetTechnique(RCObjectTechniques.Draw);
+                }
+            }
+            else if (Mesh.DepthMask != null)
             {
                 var geom = Mesh.DepthMask;
                 //depth mask for drawing into a surface or wall
@@ -455,6 +484,20 @@ namespace FSO.LotView.Utils
 
             ReferenceStencil = 1,
             DepthBufferWriteEnable = true
+        };
+
+        /// <summary>A basin's lid: stencil 1 wherever it's in front of what's drawn, either side, without writing depth.</summary>
+        public static DepthStencilState BasinMark = new DepthStencilState()
+        {
+            StencilEnable = true,
+            StencilFunction = CompareFunction.Always,
+            StencilPass = StencilOperation.Replace,
+            StencilFail = StencilOperation.Keep,
+            StencilDepthBufferFail = StencilOperation.Keep,
+            ReferenceStencil = 1,
+            DepthBufferEnable = true,
+            DepthBufferWriteEnable = false,
+            DepthBufferFunction = CompareFunction.LessEqual
         };
 
         public static DepthStencilState DepthClear2 = new DepthStencilState()
