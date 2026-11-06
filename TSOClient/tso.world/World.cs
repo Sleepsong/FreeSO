@@ -1003,6 +1003,90 @@ namespace FSO.LotView
             return Platform.GetLotThumb(gd, State, rooflessCallback);
         }
 
+        /// <summary>
+        /// Draws the lot again, into a picture's target, from a camera close to its point: a live view of something on the
+        /// lot (TS1's "Live Picture in Picture", in event popups). Call it before the UI is drawn (in PreDraw). Only in 3D,
+        /// with the 3D camera (not first person). The camera looks the way the main view does, from above. The picture has
+        /// its own walls, cut as it asks, made again only when that cut, its floor, the view's rotation or the walls change;
+        /// doors hide with its cut, roofs and the floors above its floor are hidden. Everything the main view uses is put
+        /// back afterwards. Returns false when it can't draw.
+        /// </summary>
+        public bool DrawPicture(GraphicsDevice gd, WorldPicture pic)
+        {
+            if (!HasInit || Blueprint == null || pic?.Target == null || pic.Target.IsDisposed) return false;
+            if (State.CameraMode != CameraRenderMode._3D || State.Cameras.ActiveCamera != State.Cameras.Camera3D) return false;
+            if (State.Cameras.TransitionWeights.Count > 0) return false; //the view is a blend of cameras for now
+            var bp = Blueprint;
+            if (bp.Cutaway == null || bp.WCRC == null) return false;
+            var cam = State.Camera3D;
+            var oldPos = cam.Position;
+            var oldTarget = cam.Target;
+            var oldLevel = State.Level;
+            var oldRoofs = State.DrawRoofs;
+            var oldCut = bp.Cutaway;
+            var oldWalls = bp.WCRC;
+            var oldTargets = gd.GetRenderTargets();
+            var doors = new List<Tuple<ObjectComponent, bool>>();
+            try
+            {
+                var level = (sbyte)Math.Max(1, Math.Min(bp.Stories, (int)pic.Level));
+                State.SilentLevel = level;
+                var cut = (pic.Cut != null && pic.Cut.Length == oldCut.Length) ? pic.Cut : new bool[oldCut.Length];
+                bp.Cutaway = cut;
+
+                //its own walls: all made again when the walls changed, or its floor or the rotation did (a cut-only pass
+                //only makes the current floor again); only its floor when just its cut did
+                if (pic.Walls == null) pic.Walls = new WallComponentRC() { blueprint = bp };
+                var rotation = State.CutRotation;
+                if (pic.WallsSeen != oldWalls.FullGenerations || pic.WallsLevel != level || pic.WallsRotation != rotation || pic.WallsCut == null)
+                    pic.Walls.Generate(gd, State, false);
+                else if (!System.Linq.Enumerable.SequenceEqual(pic.WallsCut, cut))
+                    pic.Walls.Generate(gd, State, true);
+                pic.WallsSeen = oldWalls.FullGenerations;
+                pic.WallsLevel = level;
+                pic.WallsRotation = rotation;
+                pic.WallsCut = (bool[])cut.Clone();
+                bp.WCRC = pic.Walls;
+                State.DrawRoofs = false;
+
+                //doors hide where its cut takes their walls down (and show where only the main view's cut hid them)
+                foreach (var obj in bp.Objects)
+                {
+                    if (!obj.HidesWithWalls) continue;
+                    doors.Add(new Tuple<ObjectComponent, bool>(obj, obj.SilentCutawayHidden));
+                    obj.SilentCutawayHidden = obj.CutsAway(State);
+                }
+
+                //the camera: facing the way the main view does, from above, close to the point
+                var focus = pic.Focus * WorldSpace.WorldUnitsPerTile;
+                var dir = oldPos - oldTarget;
+                dir.Y = 0;
+                if (dir.LengthSquared() < 0.0001f) dir = new Vector3(1, 0, 1);
+                dir.Normalize();
+                cam.Target = focus;
+                cam.Position = focus + (dir * (float)Math.Cos(pic.Pitch) + Vector3.Up * (float)Math.Sin(pic.Pitch)) * pic.Distance;
+
+                gd.SetRenderTarget(pic.Target);
+                cam.ProjectionDirty(); //square, not the screen's shape
+                InternalDraw(gd);
+                return true;
+            }
+            finally
+            {
+                foreach (var door in doors) door.Item1.SilentCutawayHidden = door.Item2;
+                bp.WCRC = oldWalls;
+                bp.Cutaway = oldCut;
+                State.DrawRoofs = oldRoofs;
+                State.SilentLevel = oldLevel;
+                cam.Position = oldPos;
+                cam.Target = oldTarget;
+                if (oldTargets.Length > 0) gd.SetRenderTargets(oldTargets);
+                else gd.SetRenderTarget(null);
+                cam.ProjectionDirty();
+                State.PrepareCamera();
+            }
+        }
+
         public void ChangeAAMode(GraphicsDevice gd)
         {
             var lastm = PPXDepthEngine.MSAA;

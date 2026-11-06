@@ -468,7 +468,20 @@ namespace FSO.LotView.Components
                     if (blueprint != null && RenderInfo.Layer == WorldObjectRenderLayer.STATIC) blueprint.Changes.RegisterObjectChange(this);
                 }
 
-                if (Level != world.Level || world.BuildMode > 1) CutawayHidden = false;
+                CutawayHidden = CutsAway(world);
+            }
+        }
+
+        /// <summary>Whether this object hides with the walls it's in (a door), when they're cut away.</summary>
+        public bool HidesWithWalls => HideForCutaway || HideForCutawayInWall;
+
+        /// <summary>
+        /// Whether this object (a door) is hidden for cutaway, with the blueprint's cut and the level as they are now. Also
+        /// used by a second view of the lot with its own cut (World.DrawPicture), which sets SilentCutawayHidden with it.
+        /// </summary>
+        public bool CutsAway(WorldState world)
+        {
+                if (Level != world.Level || world.BuildMode > 1) return false;
                 else
                 {
                     var tilePos = new Point((int)Math.Round(Position.X), (int)Math.Round(Position.Y));
@@ -493,10 +506,17 @@ namespace FSO.LotView.Components
                                 && blueprint.Cutaway[pos.Y * blueprint.Width + pos.X]);
                             if (!canContinue) break;
                         }
-                        CutawayHidden = canContinue;
+                        return canContinue;
                     }
                 }
-            }
+                return _CutawayHidden;
+        }
+
+        /// <summary>Sets whether it's hidden for cutaway without marking it changed (for a second view of the lot).</summary>
+        public bool SilentCutawayHidden
+        {
+            get { return _CutawayHidden; }
+            set { _CutawayHidden = value; }
         }
 
         /// <summary>
