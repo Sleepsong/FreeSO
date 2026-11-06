@@ -208,7 +208,8 @@ namespace FSO.SimAntics
             get { return _Direction; }
             set {
                 var notches = GetValue(VMStackObjectVariable.RotationNotches);
-                if (notches > 1)
+                //(only a change of direction snaps to the object's notches: one placed diagonally stays so when moved)
+                if (notches > 1 && value != _Direction)
                 {
                     var index = Array.IndexOf(DirectionNotches, value);
                     if (index != -1)
@@ -218,6 +219,16 @@ namespace FSO.SimAntics
 
                 if (UseWorld) WorldUI.Direction = _Direction;
             }
+        }
+
+        /// <summary>
+        /// Faces exactly this way, even a diagonal the object's rotation notches would snap back to one of the four main
+        /// directions: what the player chose with Simitone's 45 degree rotation cheat, or what a save kept.
+        /// </summary>
+        public override void SetDirectionExact(Direction direction)
+        {
+            _Direction = direction;
+            if (UseWorld) WorldUI.Direction = _Direction;
         }
 
         public override Vector3 VisualPosition
@@ -499,7 +510,7 @@ namespace FSO.SimAntics
             base.Load(input);
             ObjectState = (VMIObjectState)PlatformState;
             Position = Position;
-            Direction = input.Direction;
+            SetDirectionExact(input.Direction); //(as saved: a diagonal from the 45 degree rotation cheat too)
             Disabled = input.Disabled;
             if (UseWorld)
             {
@@ -572,7 +583,7 @@ namespace FSO.SimAntics
             SetValue(VMStackObjectVariable.WallPlacementFlags, input.WallPlacementFlags);
             SetValue(VMStackObjectVariable.AllowedHeightFlags, input.AllowedHeightFlags);
             Position = input.Position;
-            Direction = input.Direction;
+            SetDirectionExact(input.Direction); //(as saved: a diagonal from the 45 degree rotation cheat too)
 
             if (UseWorld)
             {
