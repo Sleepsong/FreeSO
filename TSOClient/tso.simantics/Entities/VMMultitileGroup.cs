@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using FSO.LotView.Model;
+using FSO.Common.Utils;
 using Microsoft.Xna.Framework;
 using FSO.LotView.Components;
 using FSO.SimAntics.Model;
@@ -172,18 +173,8 @@ namespace FSO.SimAntics.Entities
                 OldSlotNum[i] = Objects[i].ContainerSlot;
             }
 
-            int Dir = 0;
-            switch (direction)
-            {
-                case Direction.NORTH:
-                    Dir = 0; break;
-                case Direction.EAST:
-                    Dir = 2; break;
-                case Direction.SOUTH:
-                    Dir = 4; break;
-                case Direction.WEST:
-                    Dir = 6; break;
-            }
+            //eighths of a turn from north: the four main directions, or a diagonal from the 45 degree rotation cheat
+            int Dir = DirectionUtils.Log2Int((uint)direction);
 
             Matrix rotMat = Matrix.CreateRotationZ((float)(Dir * Math.PI / 4.0));
             VMPlacementResult[] places = new VMPlacementResult[count];
@@ -316,18 +307,8 @@ namespace FSO.SimAntics.Entities
         public void SetVisualPosition(Vector3 pos, Direction direction, VMContext context)
         {
             if (Objects.Count == 0) return;
-            int Dir = 0;
-            switch (direction)
-            {
-                case Direction.NORTH:
-                    Dir = 0; break;
-                case Direction.EAST:
-                    Dir = 2; break;
-                case Direction.SOUTH:
-                    Dir = 4; break;
-                case Direction.WEST:
-                    Dir = 6; break;
-            }
+            //eighths of a turn from north: the four main directions, or a diagonal from the 45 degree rotation cheat
+            int Dir = DirectionUtils.Log2Int((uint)direction);
 
             Matrix rotMat = Matrix.CreateRotationZ((float)(Dir * Math.PI / 4.0));
 
@@ -356,18 +337,8 @@ namespace FSO.SimAntics.Entities
         {
             var bObj = BaseObject;
 
-            int Dir = 0;
-            switch (bObj.Direction)
-            {
-                case Direction.NORTH:
-                    Dir = 0; break;
-                case Direction.EAST:
-                    Dir = 2; break;
-                case Direction.SOUTH:
-                    Dir = 4; break;
-                case Direction.WEST:
-                    Dir = 6; break;
-            }
+            //eighths of a turn from north: the four main directions, or a diagonal from the 45 degree rotation cheat
+            int Dir = DirectionUtils.Log2Int((uint)bObj.Direction);
             Matrix rotMat = Matrix.CreateRotationZ((float)(-Dir * Math.PI / 4.0));
             foreach (var obj in other.Objects)
             {

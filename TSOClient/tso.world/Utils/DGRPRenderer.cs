@@ -102,19 +102,21 @@ namespace FSO.LotView.Utils
         {
             get
             {
-                switch (_Direction)
-                {
-                    case Direction.NORTH:
-                        return 0;
-                    case Direction.EAST:
-                        return (float)Math.PI / 2;
-                    case Direction.SOUTH:
-                        return (float)Math.PI;
-                    case Direction.WEST:
-                        return (float)Math.PI * 1.5f;
-                    default:
-                        return 0;
-                }
+                //the direction its 2D sprites face: the nearest of the four, for a diagonal
+                return FSO.Common.Utils.DirectionUtils.Log2Int((uint)SpriteDirection) * (float)(Math.PI / 4);
+            }
+        }
+
+        /// <summary>
+        /// The direction for 2D sprites, which only exist for the four main ones: a diagonal (from the 45 degree rotation
+        /// cheat, made in 3D) shows the one before it, so it isn't invisible in 2D.
+        /// </summary>
+        private Direction SpriteDirection
+        {
+            get
+            {
+                var index = FSO.Common.Utils.DirectionUtils.Log2Int((uint)_Direction);
+                return (Direction)(1 << (index - (index % 2)));
             }
         }
 
@@ -156,7 +158,7 @@ namespace FSO.LotView.Utils
                 {
                     Dispose();
                     Items.Clear();
-                    var direction = (uint)_Direction;
+                    var direction = (uint)SpriteDirection;
 
                     /** Compute the direction **/
                     var image = DrawGroup.GetImage(direction, (uint)world.Zoom, (uint)world.Rotation);
