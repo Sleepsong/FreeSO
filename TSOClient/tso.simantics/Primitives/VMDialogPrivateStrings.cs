@@ -34,8 +34,13 @@ namespace FSO.SimAntics.Primitives
                 //in ts1, it's possible for a lot of blocking dialogs to come in one frame. due to the way our engine works,
                 //we cannot pause the rest of the tick as soon as we hit a blocking dialog, and we cannot show more than one blocking dialog.
                 //so additional blocking dialogs must wait.
+                if (context.VM.TS1)
+                {
+                    //Try for Baby answers the game's baby question itself
+                    var answer = Model.TS1Platform.VMTryForBaby.AnswerDialog(context, operand, table);
+                    if (answer != null) return answer.Value ? VMPrimitiveExitCode.GOTO_TRUE : VMPrimitiveExitCode.GOTO_FALSE;
+                }
                 if (context.VM.TS1 && context.VM.GlobalBlockingDialog != null) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
-                if (context.VM.TS1) Model.TS1Platform.VMTryForBaby.OnDialog(context, operand, table);
                 VMDialogHandler.ShowDialog(context, operand, table);
 
                 if ((operand.Flags & VMDialogFlags.Continue) == 0)

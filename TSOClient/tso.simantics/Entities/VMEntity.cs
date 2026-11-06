@@ -981,7 +981,7 @@ namespace FSO.SimAntics
         public List<VMPieMenuInteraction> GetPieMenu(VM vm, VMEntity caller, bool includeHidden, bool includeGlobal)
         {
             var pie = new List<VMPieMenuInteraction>();
-            Model.TS1Platform.VMTryForBaby.Prepare(vm, this); //Try for Baby, on Sims in The Sims 1
+            Model.TS1Platform.VMTryForBaby.Prepare(vm, this, caller); //Try for Baby, on beds with WooHoo in The Sims 1
             if (TreeTable == null) return pie;
 
             var myLength = TreeTable.Interactions.Length;
