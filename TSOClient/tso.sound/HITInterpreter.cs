@@ -220,18 +220,22 @@ namespace FSO.HIT
         /// </summary>
         public static HITResult Jump(HITThread thread)
         {
-            var read = thread.ReadByte();
+            //The operand is a 4 byte address, or a register (0-15). This told them apart by the first byte alone, so an
+            //address whose low byte is 15 or less (0x1B0A) was taken for a register, usually 0: the script jumped to the
+            //start of the file and ran its header. Read as 4 bytes, an address is one that's in the file; a register is
+            //a value under 16 (4 bytes) or a byte followed by the next instruction.
+            var data = thread.Src.Data;
+            var at = (int)thread.PC;
+            uint value = (at + 4 <= data.Length) ? (uint)(data[at] | (data[at + 1] << 8) | (data[at + 2] << 16) | (data[at + 3] << 24)) : 0;
+            var first = data[at];
 
-            if (read > 15) //literal
+            if (first > 15 || (value >= 16 && value < data.Length)) //literal address
             {
-                thread.PC--; //backtraaackkk
                 thread.PC = PCTrans(thread.ReadUInt32(), thread);
             }
-            else //no idea if there are collisions. if there are i'm blaming fatbag. >:)
+            else //a register
             {
-                thread.PC = PCTrans((uint)thread.ReadVar(read), thread);
-                if (thread.ReadByte() == 0) thread.PC += 2; //if next is no-op, the operand is 4 byte
-                else thread.PC--; //operand is 1 byte (next is an instruction), backtrack
+                thread.PC = PCTrans((uint)thread.ReadVar(first), thread);
             }
 
             return HITResult.CONTINUE;

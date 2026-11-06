@@ -161,6 +161,7 @@ namespace FSO.HIT
                     {
                         while (true)
                         {
+                            var opcodeAt = PC;
                             var opcode = Src.Data[PC++];
                             if (opcode >= HITInterpreter.Instructions.Length) opcode = 0;
                             if (HITInterpreter.Unimplemented.Contains(opcode))
@@ -168,6 +169,15 @@ namespace FSO.HIT
                                     + HITInterpreter.Instructions[opcode].Method.Name + " (0x" + opcode.ToString("X2") + "), which does nothing here. Script bytes from "
                                     + "0x" + (PC - 1).ToString("X") + ": " + BytesAt((int)PC - 1, 16) + " (before: " + BytesAt((int)PC - 9, 8) + ")");
                             var result = HITInterpreter.Instructions[opcode](this);
+                            if (PC < 16 && Src.Data.Length >= 4 && Src.Data[0] == 'H' && Src.Data[1] == 'I' && Src.Data[2] == 'T')
+                            {
+                                //the first 16 bytes are the file's header, not code: stop rather than run it
+                                FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + Name + "' jumped into its .hit file's header (to 0x" + PC.ToString("X")
+                                    + ") from " + HITInterpreter.Instructions[opcode].Method.Name + " at 0x" + opcodeAt.ToString("X") + ": "
+                                    + BytesAt((int)opcodeAt, 8) + ". It stops there.");
+                                ThreadDead = true;
+                                return true;
+                            }
                             if (result == HITResult.HALT) return true;
                             else if (result == HITResult.KILL)
                             {
