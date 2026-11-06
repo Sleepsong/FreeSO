@@ -25,7 +25,7 @@ namespace FSO.SimAntics.Marshals
         // 36 - FSO Inventory Token (inventory ops async state has temp list)
         // 37 - Inventory Token Total
         // 38 - Direct Control Frame
-        public static readonly int LATEST_VERSION = 39; //39: foundations, at the end of the save
+        public static readonly int LATEST_VERSION = 40; //39: foundations, at the end of the save; 40: the basement (level 0), after them
 
         public int Version = LATEST_VERSION;
         public bool Compressed = true;
@@ -119,6 +119,13 @@ namespace FSO.SimAntics.Marshals
                 Context.Architecture.Terrain?.SetFoundations(foundations);
             }
 
+            //40: the basement (level 0), after the foundations, for the same reason
+            if (Version > 39)
+            {
+                Context.Architecture.ReadBasement(reader);
+                Context.Architecture.Terrain?.SetBasement(Context.Architecture.Basement);
+            }
+
             if (Compressed)
             {
                 reader.BaseStream.Close();
@@ -180,6 +187,7 @@ namespace FSO.SimAntics.Marshals
             if (Tuning != null) Tuning.SerializeInto(writer);
 
             VMArchitectureTerrain.WriteFoundations(writer, Context.Architecture?.Foundations);
+            VMArchitectureMarshal.WriteBasement(writer, Context.Architecture?.Basement, Context.Architecture?.BasementWalls, Context.Architecture?.BasementFloors);
 
             if (Compressed)
             {

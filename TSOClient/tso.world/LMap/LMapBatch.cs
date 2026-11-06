@@ -290,7 +290,8 @@ namespace FSO.LotView.LMap
             foreach (var rm in ordered)
             {
                 var room = rooms[rm.RoomID];
-                if (room.WallLines == null || room.Floor > floorLimit)
+                //(the basement's rooms, floor -1, have no light maps yet)
+                if (room.WallLines == null || room.Floor > floorLimit || room.Floor < 0)
                 {
                     DirtyRooms.Remove(rm);
                     continue;
@@ -349,7 +350,7 @@ namespace FSO.LotView.LMap
             for (int i = 0; i < rooms.Count; i++)
             {
                 var room = rooms[i];
-                if (room.WallLines == null || room.Floor > floorLimit) continue;
+                if (room.WallLines == null || room.Floor > floorLimit || room.Floor < 0) continue; //(not the basement's yet)
                 if (room.Floor != floor)
                 {
                     floor = room.Floor;

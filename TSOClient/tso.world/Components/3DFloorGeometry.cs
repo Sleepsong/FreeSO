@@ -29,7 +29,13 @@ namespace FSO.LotView.Components
     public class _3DFloorGeometry : IDisposable
     {
         public Blueprint Bp;
-        public FloorLevel[] Floors;
+        /// <summary>By level - 1: [-1] is the basement (its dug out tiles, and the earth's sides round them).</summary>
+        public LevelArray<FloorLevel> Floors;
+        /// <summary>
+        /// The ground floor's tiles over the basement: its ceiling, kept apart so it can be left out while the basement is
+        /// shown (the ground floor's other tiles, the ground among them, stay).
+        /// </summary>
+        public FloorLevel Ceiling;
 
         public static bool af2019;
         static Dictionary<int, Texture2D> PoolReplace; //af2019
@@ -38,11 +44,12 @@ namespace FSO.LotView.Components
         public _3DFloorGeometry(Blueprint bp)
         {
             Bp = bp;
-            Floors = new FloorLevel[bp.Stories];
-            for (int i=0; i<bp.Stories; i++)
+            Floors = new LevelArray<FloorLevel>(bp.Stories);
+            for (int i = LevelArray<int>.MinIndex; i<bp.Stories; i++)
             {
                 Floors[i] = new FloorLevel(bp);
             }
+            Ceiling = new FloorLevel(bp);
         }
 
         private void LoadPoolReplace(GraphicsDevice gd, string folder)
@@ -67,12 +74,13 @@ namespace FSO.LotView.Components
         public void FullReset(GraphicsDevice gd, bool buildMode)
         {
             if (af2019 && PoolReplace == null) LoadPoolReplace(gd, "af19");
-            for (int i=0; i<Floors.Length; i++)
+            for (int i = LevelArray<int>.MinIndex; i<Floors.Length; i++) //the basement (-1) and up
             {
                 var lvl = Floors[i];
                 var data = Bp.Floors[i];
                 var walls = Bp.Walls[i];
                 lvl.Clear();
+                if (i == 0) Ceiling.Clear();
                 var width = Bp.Width;
                 var end = data.Length - width;
                 for (int j=width; j<end; j++)
@@ -83,21 +91,19 @@ namespace FSO.LotView.Components
                     if ((wall.Segments & WallSegments.AnyDiag) > 0)
                     {
                         var vertical = (wall.Segments & WallSegments.VerticalDiag) > 0;
+                        var dug = IsDug(j);
+                        if (i == -1 && !dug) continue; //the basement is earth where it isn't dug out
+                        var target = (i == 0 && dug) ? Ceiling : lvl;
 
-                        if (wall.TopLeftPattern != 0 || i == 0) lvl.AddTileDiag(wall.TopLeftPattern, (ushort)j, true, vertical);
-                        if (wall.TopLeftStyle != 0 || i == 0) lvl.AddTileDiag(wall.TopLeftStyle, (ushort)j, false, vertical);
+                        if (wall.TopLeftPattern != 0 || i == 0) target.AddTileDiag(wall.TopLeftPattern, (ushort)j, true, vertical);
+                        if (wall.TopLeftStyle != 0 || i == 0) target.AddTileDiag(wall.TopLeftStyle, (ushort)j, false, vertical);
                     }
                     else
                     {
-                        // steps, and foundations with nothing laid on them, are drawn by the foundation models
-                        if (i == 0 && HiddenByFoundation(j, pat)) continue;
-                        var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), buildMode);
-                        if (convert == 0 && i > 0) continue;
-                        lvl.AddTile(convert, (ushort)j);
+                        AddFloorTile(i, lvl, j, pat, buildMode);
                     }
                 }
-                if (i == 0) AddFoundations(lvl);
-                lvl.RegenAll(gd);
+                FinishLevel(gd, i, lvl);
             }
         }
 
@@ -125,13 +131,58 @@ namespace FSO.LotView.Components
             foreach (var pattern in patterns) lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, pattern));
         }
 
+        private bool IsDug(int index)
+        {
+            var map = Bp.Basement;
+            return map != null && map.Any && map.Dug[index] != 0;
+        }
+
+        /// <summary>
+        /// Adds a floor tile to its level (by index: -1 is the basement), as the resets do: the basement only has its dug
+        /// out tiles, foundations draw their own tops and steps, and a ground floor tile over the basement goes in the
+        /// <see cref="Ceiling"/>.
+        /// </summary>
+        private void AddFloorTile(int i, FloorLevel lvl, int j, ushort pat, bool buildMode)
+        {
+            var dug = IsDug(j);
+            if (i == -1 && (!dug || pat == 0)) return;
+            if (i == 0 && dug && pat == 0) return; //a hole over the basement (a stairwell), not ground
+            // steps, and foundations with nothing laid on them, are drawn by the foundation models
+            if (i == 0 && HiddenByFoundation(j, pat)) return;
+            var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), buildMode);
+            if (convert == 0 && i != 0) return;
+            ((i == 0 && dug) ? Ceiling : lvl).AddTile(convert, (ushort)j);
+        }
+
+        /// <summary>The models a level has besides its tiles (foundations on the ground floor, the earth's sides round the basement), then its GPU data.</summary>
+        private void FinishLevel(GraphicsDevice gd, int i, FloorLevel lvl)
+        {
+            if (i == 0) AddFoundations(lvl);
+            if (i == -1) AddBasementSides(lvl);
+            lvl.RegenAll(gd);
+            if (i == 0) Ceiling.RegenAll(gd);
+        }
+
+        /// <summary>One model per wall covering for the earth's sides round the basement's dug out tiles.</summary>
+        private void AddBasementSides(FloorLevel lvl)
+        {
+            var map = Bp.Basement;
+            if (map == null || !map.Any) return;
+            var patterns = new HashSet<ushort>();
+            for (int y = 0; y < map.Height; y++)
+                for (int x = 0; x < map.Width; x++)
+                    if (Modelled3DBasement.HasGeometry(map, x, y)) patterns.Add(map.Pattern[y * map.Width + x]);
+            foreach (var pattern in patterns) lvl.FoundationGroups.Add(new Modelled3DBasement(Bp, pattern));
+        }
+
         public void SliceReset(GraphicsDevice gd, Rectangle slice)
         {
-            for (int i = 0; i < Floors.Length; i++)
+            for (int i = LevelArray<int>.MinIndex; i < Floors.Length; i++) //the basement (-1) and up
             {
                 var lvl = Floors[i];
                 var data = Bp.Floors[i];
                 lvl.Clear();
+                if (i == 0) Ceiling.Clear();
 
                 for (int x=slice.X; x<slice.Right; x++)
                 {
@@ -140,37 +191,30 @@ namespace FSO.LotView.Components
                         var j = y * Bp.Width + x;
                         var pat = data[j].Pattern;
                         if ((j + 1) % Bp.Width < 2) continue;
-                        if (i == 0 && HiddenByFoundation(j, pat)) continue;
-                        var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), false);
-                        if (convert == 0 && i > 0) continue;
-                        lvl.AddTile(convert, (ushort)j);
+                        AddFloorTile(i, lvl, j, pat, false);
                     }
                 }
-                if (i == 0) AddFoundations(lvl);
-                lvl.RegenAll(gd);
+                FinishLevel(gd, i, lvl);
             }
         }
 
         public void BuildableReset(GraphicsDevice gd, bool[] buildable)
         {
-            for (int i = 0; i < Floors.Length; i++)
+            for (int i = LevelArray<int>.MinIndex; i < Floors.Length; i++) //the basement (-1) and up
             {
                 var lvl = Floors[i];
                 var data = Bp.Floors[i];
                 lvl.Clear();
+                if (i == 0) Ceiling.Clear();
 
                 for (int j = 0; j < data.Length; j++)
                 {
                     if (!buildable[j]) continue;
                     var pat = data[j].Pattern;
                     if ((j + 1) % Bp.Width < 2) continue;
-                    if (i == 0 && HiddenByFoundation(j, pat)) continue;
-                    var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), false);
-                    if (convert == 0 && i > 0) continue;
-                    lvl.AddTile(convert, (ushort)j);
+                    AddFloorTile(i, lvl, j, pat, false);
                 }
-                if (i == 0) AddFoundations(lvl);
-                lvl.RegenAll(gd);
+                FinishLevel(gd, i, lvl);
             }
         }
 
@@ -325,10 +369,26 @@ namespace FSO.LotView.Components
                 gd.RasterizerState = RasterizerState.CullCounterClockwise;
             }
 
-            var f = 0;
-            foreach (var floor in Floors)
+            //the basement (index -1) and up; the ground floor's tiles over the basement (its ceiling) are drawn with the
+            //ground floor, except while the basement is shown
+            var drawCeiling = state == null || state.Level > 0;
+            for (int fi = LevelArray<int>.MinIndex; fi <= Floors.Length; fi++)
             {
-                if (!floors.Contains((sbyte)(f++))) continue;
+                FloorLevel floor;
+                int index;
+                if (fi == Floors.Length)
+                {
+                    if (!drawCeiling) continue;
+                    floor = Ceiling;
+                    index = 0;
+                }
+                else
+                {
+                    floor = Floors[fi];
+                    index = fi;
+                }
+                if (!floors.Contains((sbyte)index)) continue;
+                var f = index + 1;
 
                 Matrix worldmat;
                 if (lightWorld == null)
@@ -341,7 +401,7 @@ namespace FSO.LotView.Components
                 
                 e.World = worldmat;
                 e.Level = (float)(f-((lightWorld == null)?0.999f:1f));
-                if (roommaps != null) e.RoomMap = roommaps[f-1];
+                if (roommaps != null) e.RoomMap = roommaps[Math.Max(0, f-1)]; //(the basement has no room map of its own yet)
                 foreach (var type in floor.GroupForTileType)
                 {
                     bool water = false;
@@ -654,6 +714,8 @@ namespace FSO.LotView.Components
             {
                 floor.Dispose();
             }
+            Floors.Basement?.Dispose();
+            Ceiling?.Dispose();
         }
     }
 

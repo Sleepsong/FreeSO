@@ -19,7 +19,7 @@ namespace FSO.LotView.Components.Geometry
         public ushort WallPattern;
         private Texture2D Texture;
 
-        private const float StoreyHeight = 2.95f;
+        protected const float StoreyHeight = 2.95f;
 
         public Modelled3DFoundation(Blueprint bp, ushort pattern) : base(bp)
         {
@@ -60,7 +60,7 @@ namespace FSO.LotView.Components.Geometry
         }
 
         /// <summary>Ground height (without foundations or the lot's base altitude) at a terrain vertex.</summary>
-        private float GroundAtVertex(int x, int y)
+        protected float GroundAtVertex(int x, int y)
         {
             var alt = Bp.Altitude;
             if (alt == null) return 0;
@@ -167,7 +167,7 @@ namespace FSO.LotView.Components.Geometry
         /// The wall texture's v for a height above the ground: the bottom of a storey's wall is at the bottom of the
         /// texture, as FreeSO's 3D walls map it.
         /// </summary>
-        private static float WallV(float height)
+        protected static float WallV(float height)
         {
             return 0.995f - (height / StoreyHeight) * 0.96f;
         }
@@ -176,7 +176,7 @@ namespace FSO.LotView.Components.Geometry
         /// A quad (corners in order round it, tile units) seen from both sides, so it shows whichever way the camera
         /// culls.
         /// </summary>
-        private static void AddQuad(List<TerrainParallaxVertex> verts, List<int> inds, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal,
+        protected static void AddQuad(List<TerrainParallaxVertex> verts, List<int> inds, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal,
             Vector2 t0, Vector2 t1, Vector2 t2, Vector2 t3)
         {
             var baseI = verts.Count;

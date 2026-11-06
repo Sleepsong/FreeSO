@@ -203,8 +203,10 @@ namespace FSO.SimAntics.Utils
                     {
                         var tPos = pos + WLSubOff[direction / 2]; //get the other side of the wall
                         if (target.OutsideClip((short)tPos.X, (short)tPos.Y, level)) return false; //both sides of wall must be in bounds
+                        //in the basement, a wall needs the basement on at least one side (its edge against the earth is fine)
+                        if (level == 0 && !target.Basement.IsDug(pos.X, pos.Y) && !target.Basement.IsDug(tPos.X, tPos.Y)) return false;
                         wall = target.GetWall((short)tPos.X, (short)tPos.Y, level);
-                        if (!(level == 1 || target.Supported[level - 2][pos.Y * target.Width + pos.X] || target.Supported[level - 2][tPos.Y * target.Width + tPos.X])) return false;
+                        if (!(level <= 1 || target.Supported[level - 2][pos.Y * target.Width + pos.X] || target.Supported[level - 2][tPos.Y * target.Width + tPos.X])) return false;
                         if ((wall.Segments & AnyDiag) == 0)
                         {
                             wall.Segments |= WLSubSeg[direction / 2];
@@ -213,7 +215,9 @@ namespace FSO.SimAntics.Utils
                         else return false;
                     } else
                     {
-                        if (!(level == 1 || target.Supported[level - 2][pos.Y * target.Width + pos.X])) return false;
+                        //a diagonal wall in the basement: within a dug tile
+                        if (level == 0 && !target.Basement.IsDug(pos.X, pos.Y)) return false;
+                        if (!(level <= 1 || target.Supported[level - 2][pos.Y * target.Width + pos.X])) return false;
                     }
                 }
                 else return false;

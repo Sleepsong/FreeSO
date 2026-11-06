@@ -16,11 +16,30 @@ namespace FSO.SimAntics.Model
 
         private ushort ExpectedTile;
 
+        /// <summary>A ground floor tile over the basement with no floor (a stairwell): air, as on upper floors.</summary>
+        public const ushort AirTile = 65503;
+
+        /// <summary>The ground floor's floors, with air where the basement is below and there's no floor.</summary>
+        public static FloorTile[] AirOverBasement(FloorTile[] floors, BasementMap map)
+        {
+            var result = (FloorTile[])floors.Clone();
+            for (int i = 0; i < result.Length && i < map.Dug.Length; i++)
+                if (map.Dug[i] != 0 && result[i].Pattern == 0) result[i].Pattern = AirTile;
+            return result;
+        }
+        private bool SolidAir; //generating the basement: air is earth
+
         /// <summary>
         /// Generates the room map for the specified walls array.
         /// </summary>
-        public void GenerateMap(WallTile[] Walls, FloorTile[] Floors, int width, int height, List<VMRoom> rooms, sbyte floor, VMContext context) //for first floor gen, curRoom should be 1. For floors above, it should be the last genmap result
+        public void GenerateMap(WallTile[] Walls, FloorTile[] Floors, int width, int height, List<VMRoom> rooms, sbyte floor, VMContext context, bool basement = false) //for first floor gen, curRoom should be 1. For floors above, it should be the last genmap result
         {
+            //the basement (level 0): its rooms are the dug out tiles (which always have a floor), and the earth around them
+            //is air. Earth doesn't make a room next to it outside, as air does on upper floors.
+            SolidAir = basement;
+            //the ground floor over the basement: a tile with no floor (a stairwell) is air, not ground
+            var dugMap = context?.Architecture?.Terrain?.Basement;
+            if (!basement && floor == 0 && dugMap != null && dugMap.Any) Floors = AirOverBasement(Floors, dugMap);
             Map = new uint[width*height]; //although 0 is the base of the array, room 1 is known to simantics as room 0.
             //values of 0 indicate the room has not been chosen in that location yet.
 
@@ -186,19 +205,19 @@ namespace FSO.SimAntics.Model
 
                         bool segAllow = ((PXWalls.Segments & WallSegments.TopLeft) == 0);
                         if ((segAllow || PXWalls.TopLeftStyle != 1) && ((itemT.Dir & WallSegments.BottomRight) > 0))
-                            SpreadOnto(Walls, Floors, plusX, item.Y, 0, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow);
+                            SpreadOnto(Walls, Floors, plusX, item.Y, 0, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow, SolidAir);
 
                         segAllow = ((mainWalls.Segments & WallSegments.TopLeft) == 0);
                         if ((segAllow || mainWalls.TopLeftStyle != 1) && ((itemT.Dir & WallSegments.TopLeft) > 0))
-                            SpreadOnto(Walls, Floors, minX, item.Y, 2, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow);
+                            SpreadOnto(Walls, Floors, minX, item.Y, 2, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow, SolidAir);
 
                         segAllow = ((PYWalls.Segments & WallSegments.TopRight) == 0);
                         if ((segAllow || PYWalls.TopRightStyle != 1) && ((itemT.Dir & WallSegments.BottomLeft) > 0))
-                            SpreadOnto(Walls, Floors, item.X, plusY, 1, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow);
+                            SpreadOnto(Walls, Floors, item.X, plusY, 1, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow, SolidAir);
 
                         segAllow = ((mainWalls.Segments & WallSegments.TopRight) == 0);
                         if ((segAllow || mainWalls.TopRightStyle != 1) && ((itemT.Dir & WallSegments.TopRight) > 0))
-                            SpreadOnto(Walls, Floors, item.X, minY, 3, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow);
+                            SpreadOnto(Walls, Floors, item.X, minY, 3, Map, width, height, spread, (ushort)rooms.Count, ExpectedTile, noFloorBad, adjRooms, !segAllow, SolidAir);
                     }
 
                     var bounds = new Rectangle(rminX, rminY, (rmaxX - rminX) + 1, (rmaxY - rminY) + 1);
@@ -310,7 +329,7 @@ namespace FSO.SimAntics.Model
         }
 
         private static void SpreadOnto(WallTile[] walls, FloorTile[] floors, int x, int y, int inDir, uint[] map, int width, int height, 
-            Stack<SpreadItem> spread, ushort room, ushort expectedTile, bool noAir, HashSet<ushort> adjRoom, bool forceAdj)
+            Stack<SpreadItem> spread, ushort room, ushort expectedTile, bool noAir, HashSet<ushort> adjRoom, bool forceAdj, bool solidAir = false)
         {
             var index = x + y * width;
             var wall = walls[index];
@@ -368,13 +387,16 @@ namespace FSO.SimAntics.Model
                 roomApply = (uint)(room | (room << 16));
             }
 
-            bool cantSpread = (hasExpectation && expectedTile != targFloor) || (!hasExpectation && ((targFloor == 0 && noAir) || targFloor > 65533));
+            bool cantSpread = (hasExpectation && expectedTile != targFloor) || (!hasExpectation && ((targFloor == 0 && noAir) || targFloor > 65533))
+                || ((targFloor == AirTile) != (expectedTile == AirTile)); //air over the basement is apart from the ground and floors
 
             if (forceAdj || targRoom > 0 || cantSpread)
             {
                 //cannot spread onto this (sub)tile - we've either been here before or a non-wall is segmenting the space
                 //eg. a pool, air, fence
-                if (targRoom != room && targRoom > 0)
+                //in the basement, earth (air) beside a room isn't a room it's next to: it doesn't light it, or make it outside
+                var earth = solidAir && (expectedTile == 0 || targFloor == 0);
+                if (targRoom != room && targRoom > 0 && !earth)
                 {
                     //a non-wall is segmenting the space. targRoom contains the room we are adjacent to.
                     //this needs to be added to the other room too, as it will have failed to spread onto room 0, not ours.

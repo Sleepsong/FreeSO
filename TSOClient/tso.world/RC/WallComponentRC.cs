@@ -21,6 +21,8 @@ namespace FSO.LotView.RC
         public Blueprint blueprint;
 
         public List<Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>> GroupsByTexture = new List<Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>>();
+        /// <summary>The basement's (level 0's) walls: GroupsByTexture is by level - 1 from the ground floor.</summary>
+        public Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC> BasementGroups = new Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>();
 
         public Dictionary<ushort, Wall> WallCache = new Dictionary<ushort, Wall>();
         public Dictionary<ushort, WallStyle> WallStyleCache = new Dictionary<ushort, WallStyle>();
@@ -75,12 +77,17 @@ namespace FSO.LotView.RC
             var xz = CutCheckDir[(int)world.CutRotation] * 0.66f;
             if (float.IsNaN(xz.X)) xz = new Vector2();
 
-            //draw walls
-            for (sbyte level = 1; level <= blueprint.Floors.Length; level++)
+            //draw walls: the basement (level 0) and up
+            for (sbyte level = 0; level <= blueprint.Floors.Length; level++)
             {
                 bool canCut = (level == world.Level);
                 if (cutaway && !canCut) continue;
-                if (GroupsByTexture.Count < level) GroupsByTexture.Add(new Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>());
+                if (level == 0)
+                {
+                    foreach (var grp2 in BasementGroups.Values) grp2.Dispose();
+                    BasementGroups.Clear();
+                }
+                else if (GroupsByTexture.Count < level) GroupsByTexture.Add(new Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>());
                 else
                 {
                     //clear previous data for cutaway
@@ -90,7 +97,7 @@ namespace FSO.LotView.RC
                     }
                     GroupsByTexture[level - 1].Clear();
                 }
-                var grp = GroupsByTexture[level - 1];
+                var grp = (level == 0) ? BasementGroups : GroupsByTexture[level - 1];
 
                 var rMap = blueprint.RoomMap[level - 1];
 
@@ -177,14 +184,14 @@ namespace FSO.LotView.RC
                         var comp = blueprint.GetWall(x, y, level);
                         if (comp.Segments != 0)
                         {
-                            float bleedLight = (level == 1 || blueprint.GetFloor(x, y, level).Pattern != 0 || HasRoof(x, y, level)) ? 0 : 1;
+                            float bleedLight = (level <= 1 || blueprint.GetFloor(x, y, level).Pattern != 0 || HasRoof(x, y, level)) ? 0 : 1;
                             if ((comp.Segments & WallSegments.TopLeft) > 0)
                             {
                                 if (comp.TopLeftThick)
                                 {
                                     float extentBack = 0;
                                     float extentFront = 0;
-                                    float bleedLight2 = (level == 1 || blueprint.GetFloor((short)(x-1), y, level).Pattern != 0 || HasRoof(x-1, y, level)) ? 0 : 1;
+                                    float bleedLight2 = (level <= 1 || blueprint.GetFloor((short)(x-1), y, level).Pattern != 0 || HasRoof(x-1, y, level)) ? 0 : 1;
                                     if (y > 0 && !blueprint.GetWall(x, (short)(y - 1), level).TopLeftThick)
                                     {
                                         extentBack = -thickness;
@@ -213,7 +220,7 @@ namespace FSO.LotView.RC
                                 {
                                     float extentBack = 0;
                                     float extentFront = 0;
-                                    float bleedLight2 = (level == 1 || blueprint.GetFloor(x, (short)(y-1), level).Pattern != 0 || HasRoof(x, y-1, level)) ? 0 : 1;
+                                    float bleedLight2 = (level <= 1 || blueprint.GetFloor(x, (short)(y-1), level).Pattern != 0 || HasRoof(x, y-1, level)) ? 0 : 1;
                                     if (x > 0 && !blueprint.GetWall((short)(x - 1), y, level).TopRightThick)
                                     {
                                         extentBack = -thickness;
@@ -255,8 +262,8 @@ namespace FSO.LotView.RC
 
                             if ((comp.Segments & WallSegments.HorizontalDiag) > 0)
                             {
-                                var bl2 = (level == 1 || comp.TopLeftStyle != 0) ? 0 : 1;
-                                var bl1 = (level == 1 || comp.TopLeftPattern != 0) ? 0 : 1;
+                                var bl2 = (level <= 1 || comp.TopLeftStyle != 0) ? 0 : 1;
+                                var bl1 = (level <= 1 || comp.TopLeftPattern != 0) ? 0 : 1;
                                 if (comp.TopRightStyle == 1 || comp.TopRightStyle == 255)
                                 {
                                     addLineGeom(x, y, new Vector2(thickDiag, 1+thickDiag), new Vector2(1+thickDiag, thickDiag), comp.BottomRightPattern, (comp.ObjSetTRStyle == 0) ? comp.TopRightStyle : comp.ObjSetTRStyle, 2, 0, 1, bl1);
@@ -275,8 +282,8 @@ namespace FSO.LotView.RC
                             }
                             if ((comp.Segments & WallSegments.VerticalDiag) > 0)
                             {
-                                var bl1 = (level == 1 || comp.TopLeftStyle != 0) ? 0 : 1;
-                                var bl2 = (level == 1 || comp.TopLeftPattern != 0) ? 0 : 1;
+                                var bl1 = (level <= 1 || comp.TopLeftStyle != 0) ? 0 : 1;
+                                var bl2 = (level <= 1 || comp.TopLeftPattern != 0) ? 0 : 1;
                                 if (comp.TopRightStyle == 1 || comp.TopRightStyle == 255)
                                 {
                                     addLineGeom(x, y, new Vector2(-thickDiag, thickDiag), new Vector2(1- thickDiag, 1+thickDiag), comp.BottomLeftPattern, (comp.ObjSetTRStyle == 0) ? comp.TopRightStyle : comp.ObjSetTRStyle, 3, 0, 1, bl1);
@@ -327,9 +334,10 @@ namespace FSO.LotView.RC
             //effect.Parameters["CurrentLevel"].SetValue(state.Level - 1);
             if (GroupsByTexture.Count < state.Level) return;
 
-            for (int i = 0; i < state.Level; i++)
+            //the basement (level 0, i = -1) and up to the level shown
+            for (int i = -1; i < state.Level; i++)
             {
-                var grp = GroupsByTexture[i];
+                var grp = (i == -1) ? BasementGroups : GroupsByTexture[i];
                 foreach (var g in grp.Values)
                 {
                     if (g.PrimCount == 0) continue;
@@ -439,6 +447,8 @@ namespace FSO.LotView.RC
                 }
             }
             GroupsByTexture.Clear();
+            foreach (var g in BasementGroups.Values) g.Dispose();
+            BasementGroups.Clear();
         }
     }
 

@@ -41,7 +41,8 @@ namespace FSO.SimAntics.Utils
                     if (height > 0)
                     {
                         if (raise == height || map.Steps[i] != 0) continue;
-                        if (Blocked(arch, x, y) || HasWall(arch, x, y, x1, y1, x2, y2) || IsPool(arch, x, y)) { arch.LastFailReason = FailBlocked; return 0; }
+                        if (Blocked(arch, x, y) || HasWall(arch, x, y, x1, y1, x2, y2) || IsPool(arch, x, y)
+                            || arch.Basement?.IsDug(x, y) == true) { arch.LastFailReason = FailBlocked; return 0; } //(not over a basement, yet)
                         changes++;
                     }
                     else
@@ -117,7 +118,7 @@ namespace FSO.SimAntics.Utils
             var topRaise = map.RaiseOf(tile.X + to.X, tile.Y + to.Y);
             if (topRaise <= 0) { arch.LastFailReason = FailNoFoundation; return 0; }
             if (map.Steps[i] == dir + 1) return 0;
-            if (Blocked(arch, tile.X, tile.Y) || IsPool(arch, tile.X, tile.Y)
+            if (Blocked(arch, tile.X, tile.Y) || IsPool(arch, tile.X, tile.Y) || arch.Basement?.IsDug(tile.X, tile.Y) == true
                 || arch.GetWall((short)tile.X, (short)tile.Y, 1).Segments != 0) { arch.LastFailReason = FailBlocked; return 0; }
 
             var wasSteps = map.Steps[i] != 0;

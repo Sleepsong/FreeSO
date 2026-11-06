@@ -28,6 +28,12 @@ namespace FSO.SimAntics.Model
         public FoundationMap VisFoundations;
         private FoundationMap OldFoundations;
 
+        /// <summary>The basement's dug out tiles (see <see cref="BasementMap"/>), shared with the world for drawing.</summary>
+        public BasementMap Basement;
+        /// <summary>The copy previews (build tools dragging) change, while <see cref="EnterVis"/> is in effect.</summary>
+        public BasementMap VisBasement;
+        private BasementMap OldBasement;
+
         public TerrainType LightType = TerrainType.GRASS;
         public TerrainType DarkType = TerrainType.GRASS;
         public int Version;
@@ -50,6 +56,9 @@ namespace FSO.SimAntics.Model
 
             Foundations = new FoundationMap(width, height);
             VisFoundations = new FoundationMap(width, height);
+
+            Basement = new BasementMap(width, height);
+            VisBasement = new BasementMap(width, height);
         }
 
         public void EnterVis()
@@ -66,6 +75,10 @@ namespace FSO.SimAntics.Model
             OldFoundations = Foundations;
             VisFoundations.CopyFrom(Foundations);
             Foundations = VisFoundations;
+
+            OldBasement = Basement;
+            VisBasement.CopyFrom(Basement);
+            Basement = VisBasement;
         }
 
         public void ExitVis()
@@ -74,6 +87,8 @@ namespace FSO.SimAntics.Model
             GrassState = OldGrass;
             if (OldFoundations != null) Foundations = OldFoundations;
             OldFoundations = null;
+            if (OldBasement != null) Basement = OldBasement;
+            OldBasement = null;
         }
 
         public void RegenerateCenters() //TODO: partial update
@@ -318,6 +333,17 @@ namespace FSO.SimAntics.Model
 
             Foundations = new FoundationMap(Width, Height);
             VisFoundations = new FoundationMap(Width, Height);
+
+            Basement = new BasementMap(Width, Height);
+            VisBasement = new BasementMap(Width, Height);
+        }
+
+        /// <summary>Takes on a saved basement's dug out tiles (if they fit this lot).</summary>
+        public void SetBasement(BasementMap map)
+        {
+            if (map == null || map.Width != Width || map.Height != Height) return;
+            Basement.CopyFrom(map);
+            Basement.Refresh();
         }
     }
 }

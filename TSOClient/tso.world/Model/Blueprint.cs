@@ -27,11 +27,12 @@ namespace FSO.LotView.Model
         /// <summary>
         /// Only read these arrays, do not modify them!
         /// </summary>
-        public WallTile[][] Walls;
-        public List<int>[] WallsAt;
+        //per level, by level - 1; [-1] is the basement, level 0 (see LevelArray)
+        public LevelArray<WallTile[]> Walls;
+        public LevelArray<List<int>> WallsAt;
         public WallComponent WallComp;
 
-        public FloorTile[][] Floors;
+        public LevelArray<FloorTile[]> Floors;
         public FloorComponent FloorComp;
         public _3DFloorGeometry FloorGeom;
 
@@ -100,7 +101,7 @@ namespace FSO.LotView.Model
         public float OutsideWeatherTintP;
 
         public RoomLighting[] Light = new RoomLighting[0];
-        public uint[][] RoomMap;
+        public LevelArray<uint[]> RoomMap;
         public byte[] Indoors;
         public List<Room> Rooms = new List<Room>();
 
@@ -135,13 +136,13 @@ namespace FSO.LotView.Model
             }
         
             RoomColors = new Color[65536];
-            this.WallsAt = new List<int>[Stories];
-            this.Walls = new WallTile[Stories][];
-            this.RoomMap = new uint[Stories][];
+            this.WallsAt = new LevelArray<List<int>>(Stories);
+            this.Walls = new LevelArray<WallTile[]>(Stories);
+            this.RoomMap = new LevelArray<uint[]>(Stories);
 
-            this.Floors = new FloorTile[Stories][];
+            this.Floors = new LevelArray<FloorTile[]>(Stories);
 
-            for (int i=0; i<Stories; i++)
+            for (int i = LevelArray<int>.MinIndex; i<Stories; i++) //the basement (-1) and up
             {
                 this.WallsAt[i] = new List<int>();
                 this.Walls[i] = new WallTile[numTiles];
@@ -158,6 +159,9 @@ namespace FSO.LotView.Model
 
         /// <summary>Foundations on the ground floor (raised tiles and their steps), shared with the simulation. Null for none.</summary>
         public FoundationMap Foundations;
+
+        /// <summary>The basement's dug out tiles (level 0), shared with the simulation. Null or empty for none.</summary>
+        public BasementMap Basement;
 
         private bool HasFoundations => Foundations != null && Foundations.Any;
 
