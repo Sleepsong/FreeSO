@@ -178,15 +178,30 @@ namespace FSO.Content.TS1
                     matchedFiles.Add(file);
                 }
             }
+            //every .hsm first: a .hot can name labels that another file's .hsm defines
+            var hsms = new Dictionary<string, HSM>();
+            var allNames = new Dictionary<string, int>();
+            foreach (var file in matchedFiles)
+            {
+                var cFile = Path.Combine(ContentManager.TS1BasePath, file);
+                var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
+                var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
+                hsms[file] = hsm;
+                foreach (var name in hsm.Constants)
+                {
+                    if (!allNames.ContainsKey(name.Key)) allNames.Add(name.Key, name.Value);
+                }
+            }
+
             foreach (var file in matchedFiles)
             {
                 //load associated HIT, HSM
                 var cFile = Path.Combine(ContentManager.TS1BasePath, file);
                 var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
 
-                var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
+                var hsm = hsms[file];
                 var hit = new HITFile(PathCaseTools.Insensitive(bPath + ".hit"));
-                var hot = new Hot(cFile, hsm);
+                var hot = new Hot(cFile, hsm, allNames);
 
                 var group = new HITResourceGroup() { hsm = hsm, hit = hit, hot = hot };
 
