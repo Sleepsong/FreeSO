@@ -30,6 +30,12 @@ namespace FSO.SimAntics.Marshals
 
         public byte[] Preserialized;
 
+        /// <summary>
+        /// The drawn roofs when saved (null for the automatic roof). Not written with the architecture: VMMarshal puts
+        /// them at the very end of the save, where builds without drawn roofs don't read.
+        /// </summary>
+        public DrawnRoofs Roofs;
+
         public int Version;
         public VMArchitectureMarshal() { }
         public VMArchitectureMarshal(int version) { Version = version; }

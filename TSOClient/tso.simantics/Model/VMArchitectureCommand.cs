@@ -65,6 +65,10 @@ namespace FSO.SimAntics.Model
         TERRAIN_RAISE,
         TERRAIN_FLATTEN,
 
-        GRASS_DOT
+        GRASS_DOT,
+
+        ROOF_RECT, //x, y, x2 (width - 1), y2 (height - 1): tiles. level: the roof's level. pattern: RoofPieceType. style: direction | pitch percent << 8
+        ROOF_ERASE, //x, y: tile. level: the roof's level. Removes the newest drawn roof there
+        ROOF_AUTO //style: 1 for the automatic roof (removes drawn roofs), 0 for none
     }
 }

@@ -38,6 +38,11 @@ namespace FSO.SimAntics
         public VMArchitectureTerrain Terrain;
         public uint RoofStyle = 16;
         public float RoofPitch = 0.66f;
+        /// <summary>
+        /// Roofs drawn with the roof tool (VMRoofTools), or the automatic roof. While a tool previews a command this is
+        /// a copy with the command applied.
+        /// </summary>
+        public DrawnRoofs Roofs = new DrawnRoofs();
 
         public bool BuildBuyEnabled = true;
 
@@ -283,6 +288,12 @@ namespace FSO.SimAntics
             }
         }
 
+        /// <summary>The drawn roofs changed (for real: show them).</summary>
+        public void SignalRoofChange()
+        {
+            if (RealMode) Redraw = true;
+        }
+
         public void SignalRedraw()
         {
             Redraw = true;
@@ -438,6 +449,7 @@ namespace FSO.SimAntics
                     WorldUI.Walls = Walls;
                     WorldUI.WallsAt = WallsAt;
                     WorldUI.Floors = Floors;
+                    WorldUI.SetDrawnRoofs(Roofs);
                 }
                 return 0;
             }
@@ -447,6 +459,8 @@ namespace FSO.SimAntics
                 var oldWalls = Walls;
                 var oldWallsAt = WallsAt;
                 var oldFloors = Floors;
+                var oldRoofs = Roofs;
+                Roofs = Roofs.Clone();
                 Terrain.EnterVis();
 
                 WallsAt = new List<int>[Stories];
@@ -466,8 +480,10 @@ namespace FSO.SimAntics
                     WorldUI.Walls = Walls;
                     WorldUI.WallsAt = WallsAt;
                     WorldUI.Floors = Floors;
+                    WorldUI.SetDrawnRoofs(Roofs);
                 }
 
+                Roofs = oldRoofs;
                 Floors = oldFloors;
                 Walls = oldWalls;
                 WallsAt = oldWallsAt;
@@ -628,6 +644,11 @@ namespace FSO.SimAntics
                                 "modified terrain by " + cost + " units."
                             ));
                         }
+                        break;
+                    case VMArchitectureCommandType.ROOF_RECT:
+                    case VMArchitectureCommandType.ROOF_ERASE:
+                    case VMArchitectureCommandType.ROOF_AUTO:
+                        cost += VMRoofTools.Run(this, com);
                         break;
                     case VMArchitectureCommandType.GRASS_DOT:
                         var dotCount = VMArchitectureTools.DotTerrain(this, new Point(com.x, com.y), (short)com.pattern);
@@ -959,7 +980,8 @@ namespace FSO.SimAntics
                 RoofStyle = RoofStyle,
                 IDMap = Context.VM.TS1 ? new VMResourceIDMarshal(Context.VM) : null,
 
-                BuildBuyEnabled = BuildBuyEnabled
+                BuildBuyEnabled = BuildBuyEnabled,
+                Roofs = Roofs.Any ? Roofs.Clone() : null
             };
             marshal.Preserialize(); //this must be done to keep async serialization thread safe.
             //in other places we just clone mutable state, but here there are so many deep
@@ -983,6 +1005,8 @@ namespace FSO.SimAntics
             RoofStyle = input.RoofStyle;
 
             BuildBuyEnabled = input.BuildBuyEnabled;
+            Roofs = input.Roofs?.Clone() ?? new DrawnRoofs();
+            Redraw = true;
 
             RegenWallsAt();
             SignalTerrainRedraw();

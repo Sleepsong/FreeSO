@@ -110,6 +110,9 @@ namespace FSO.SimAntics.Marshals
                     Tuning = new DynamicTuning(reader);
             }
 
+            //drawn roofs (the roof tool): a marked block at the very end, if the lot has any
+            if (Context?.Architecture != null) Context.Architecture.Roofs = FSO.LotView.Model.DrawnRoofs.ReadIfPresent(reader);
+
             if (Compressed)
             {
                 reader.BaseStream.Close();
@@ -169,6 +172,9 @@ namespace FSO.SimAntics.Marshals
 
             writer.Write(Tuning != null);
             if (Tuning != null) Tuning.SerializeInto(writer);
+
+            //drawn roofs last, so builds without them read everything before and stop
+            if (Context?.Architecture?.Roofs?.Any == true) Context.Architecture.Roofs.Write(writer);
 
             if (Compressed)
             {

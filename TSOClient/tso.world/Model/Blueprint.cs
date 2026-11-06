@@ -39,6 +39,11 @@ namespace FSO.LotView.Model
         public List<_2DDrawBuffer> WallCache2D = new List<_2DDrawBuffer>(); //temporary: to replace with a smarter wall component with caching
 
         public RoofComponent RoofComp;
+        /// <summary>
+        /// Roofs drawn with the roof tool (null or AutoRoof for the automatic roof). Set through SetDrawnRoofs: the VM's
+        /// copy, or a preview of a roof being drawn.
+        /// </summary>
+        public DrawnRoofs DrawnRoofs;
 
         public bool[][] Supported; //directly the VM's copy at all times. DO NOT MODIFY.
 
@@ -325,6 +330,14 @@ namespace FSO.LotView.Model
             Changes.SetFlag(BlueprintGlobalChanges.WALL_CHANGED);
             //todo: should this even have a position? we're rerendering the whole thing atm
             //should eventually consider level
+        }
+
+        /// <summary>Shows these drawn roofs (rebuilding the roof only if they changed).</summary>
+        public void SetDrawnRoofs(DrawnRoofs roofs)
+        {
+            if (roofs == DrawnRoofs || (roofs != null && roofs.SameAs(DrawnRoofs)) || (roofs == null && DrawnRoofs?.Any != true)) return;
+            DrawnRoofs = roofs?.Clone();
+            if (RoofComp != null) RoofComp.ShapeDirty = true;
         }
 
         public void SignalRoomChange()
