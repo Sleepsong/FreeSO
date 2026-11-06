@@ -12,9 +12,9 @@ namespace FSO.LotView.Components.Geometry
     /// <summary>
     /// The visible parts of foundations (see <see cref="FoundationMap"/>), as in The Sims 2: concrete, with a cap round
     /// the top edge that stands out a little past the walls built on it, concrete steps, and a concrete top where no
-    /// floor is laid. The sides under the cap are concrete too, or a wall covering when one was chosen for them.
-    /// One group per side covering: the plain group (<see cref="WallPattern"/> 0) has the plain sides and every
-    /// foundation's cap, bare top and steps; a covered group only has the sides with its covering. Drawn with the
+    /// floor is laid. The sides under the cap are concrete too, or a wall covering painted on them (side by side, as on
+    /// walls). One group per side covering: the plain group (<see cref="WallPattern"/> 0) has the plain sides and every
+    /// foundation's cap, bare top and steps; a covered group only has the sides painted with its covering. Drawn with the
     /// ground floor by <see cref="_3DFloorGeometry"/>, in 2D and 3D alike, like the pools' models. Positions are in
     /// world units (3 per tile), heights without the lot's base altitude (the floor drawing takes that off).
     /// </summary>
@@ -55,7 +55,7 @@ namespace FSO.LotView.Components.Geometry
                         var i = y * map.Width + x;
                         if (map.Raise[i] > 0)
                         {
-                            if (map.Pattern[i] == WallPattern) AppendSides(verts, inds, map, x, y);
+                            AppendSides(verts, inds, map, x, y);
                             if (plain) AppendTopAndCap(verts, inds, map, x, y, floors[i].Pattern == 0);
                         }
                         else if (plain && map.Steps[i] != 0) AppendSteps(verts, inds, map, x, y);
@@ -86,8 +86,8 @@ namespace FSO.LotView.Components.Geometry
                 {
                     if (!HasGeometry(map, x, y)) continue;
                     result.Add(0);
-                    var i = y * map.Width + x;
-                    if (map.Raise[i] > 0) result.Add(map.Pattern[i]);
+                    for (int dir = 0; dir < 4; dir++)
+                        if (map.SideShows(x, y, dir)) result.Add(map.SideOf(x, y, dir));
                 }
             }
             return result;
@@ -107,12 +107,7 @@ namespace FSO.LotView.Components.Geometry
         /// Whether a foundation tile's side shows, with a cap on top: it drops to lower ground or a lower foundation, and
         /// no steps lead up to it.
         /// </summary>
-        public static bool Capped(FoundationMap map, int x, int y, int dir)
-        {
-            if (map.SideDrop(x, y, dir) <= 0) return false;
-            var d = FoundationMap.Directions[dir];
-            return map.StepDirection(x + d.X, y + d.Y) != (dir + 2) % 4;
-        }
+        public static bool Capped(FoundationMap map, int x, int y, int dir) => map.SideShows(x, y, dir);
 
         /// <summary>How the outline round the foundations goes on at one end of a capped side.</summary>
         public enum CapEnd
@@ -156,8 +151,8 @@ namespace FSO.LotView.Components.Geometry
         }
 
         /// <summary>
-        /// A foundation tile's sides in this group's covering, from the ground (or the lower foundation beside) up to the
-        /// cap.
+        /// A foundation tile's sides painted with this group's covering, from the ground (or the lower foundation beside) up
+        /// to the cap.
         /// </summary>
         private void AppendSides(List<TerrainParallaxVertex> verts, List<int> inds, FoundationMap map, int x, int y)
         {
@@ -166,7 +161,7 @@ namespace FSO.LotView.Components.Geometry
             var sideTop = raise - CapHeight;
             for (int dir = 0; dir < 4; dir++)
             {
-                if (!Capped(map, x, y, dir)) continue;
+                if (!Capped(map, x, y, dir) || map.SideOf(x, y, dir) != WallPattern) continue;
                 var bottom = (map.RaiseOf(x, y) - map.SideDrop(x, y, dir)) * tf;
                 if (sideTop <= bottom) continue;
                 var d = FoundationMap.Directions[dir];

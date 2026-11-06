@@ -70,6 +70,7 @@ namespace FSO.SimAntics.Model
         FOUNDATION_RECT, //x, y, x2 (width - 1), y2 (height - 1): tiles. style: height, 0 removes. pattern: wall covering
         FOUNDATION_STEPS, //x, y: tile. pattern: direction (0-3, 255 for the adjacent foundation). style: 1 places, 0 removes
 
-        BASEMENT_RECT //x, y, x2 (width - 1), y2 (height - 1): tiles. style: bit 0 digs (1) or fills in (0), above it the earth sides' wall covering. pattern: the floor
+        BASEMENT_RECT, //x, y, x2 (width - 1), y2 (height - 1): tiles. style: bit 0 digs (1) or fills in (0), above it the earth sides' wall covering. pattern: the floor
+        FOUNDATION_PAINT //x, y: tile. x2: its side (0-3), or 255 for every side of the foundation. pattern: wall covering, 0 for plain
     }
 }

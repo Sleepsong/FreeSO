@@ -279,10 +279,11 @@ namespace FSO.SimAntics.Model
 
         /// <summary>
         /// The foundations' own revision, written in place of the flag saying a lot has any (a reader that takes it as a
-        /// bool still sees true). 1: the sides' coverings were all put on by the build tool itself (a brick, before the
-        /// foundations were concrete); 2: a covering on the sides is one the player chose, 0 for plain concrete.
+        /// bool still sees true). 1: a covering per tile, all put on by the build tool itself (a brick, before the
+        /// foundations were concrete); 2: a covering per tile, for all its sides, 0 for plain concrete; 3: a covering per
+        /// side of each tile, painted on like walls'.
         /// </summary>
-        public const byte FoundationsRevision = 2;
+        public const byte FoundationsRevision = 3;
 
         /// <summary>
         /// Foundations, saved at the very end of a save (version 39 on; see VMMarshal) rather than with the terrain, so
@@ -297,7 +298,7 @@ namespace FSO.SimAntics.Model
             writer.Write(map.Height);
             VMSerializableUtils.WriteArray(writer, map.Raise);
             writer.Write(map.Steps);
-            VMSerializableUtils.WriteArray(writer, map.Pattern);
+            VMSerializableUtils.WriteArray(writer, map.Sides);
         }
 
         /// <summary>Reads what <see cref="WriteFoundations"/> wrote: null if the lot has none.</summary>
@@ -309,9 +310,15 @@ namespace FSO.SimAntics.Model
             var map = new FoundationMap(width, height);
             map.Raise = VMSerializableUtils.ReadArray<short>(reader, width * height);
             map.Steps = reader.ReadBytes(width * height);
-            map.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
-            //the first foundations' brick was the tool's, not the player's: they're concrete now, like new ones
-            if (revision < 2) Array.Clear(map.Pattern, 0, map.Pattern.Length);
+            if (revision >= 3) map.Sides = VMSerializableUtils.ReadArray<ushort>(reader, width * height * 4);
+            else
+            {
+                //a covering per tile: on all four of its sides. The first foundations' brick was the tool's, not the
+                //player's: they're concrete now, like new ones
+                var perTile = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
+                if (revision >= 2)
+                    for (int i = 0; i < perTile.Length; i++) map.SetAllSides(i, perTile[i]);
+            }
             map.Refresh();
             return map;
         }
