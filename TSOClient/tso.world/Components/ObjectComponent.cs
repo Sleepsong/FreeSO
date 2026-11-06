@@ -310,19 +310,8 @@ namespace FSO.LotView.Components
         {
             get
             {
-                switch (_Direction)
-                {
-                    case Direction.NORTH:
-                        return 0;
-                    case Direction.EAST:
-                        return (float)Math.PI / 2;
-                    case Direction.SOUTH:
-                        return (float)Math.PI;
-                    case Direction.WEST:
-                        return (float)Math.PI * 1.5f;
-                    default:
-                        return 0;
-                }
+                //eight ways, 45 degrees apart from north (diagonals come from the 45 degree rotation cheat, in 3D)
+                return FSO.Common.Utils.DirectionUtils.Log2Int((uint)_Direction) * (float)(Math.PI / 4);
             }
         }
 
