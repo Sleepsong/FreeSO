@@ -271,7 +271,7 @@ namespace FSO.SimAntics.Utils
             ushort replaced = 0;
             var wall = target.GetWall((short)pos.X, (short)pos.Y, level);
             //direction starts lefttop, righttop
-            if ((wall.Segments & WallSegments.HorizontalDiag) > 0 && wall.TopRightStyle == 1)
+            if ((wall.Segments & WallSegments.HorizontalDiag) > 0 && WallTile.IsThickStyle(wall.TopRightStyle))
             {
                 if (direction < 2)
                 {
@@ -291,7 +291,7 @@ namespace FSO.SimAntics.Utils
                 replaceCost.Total = direction;
                 return replaceCost;
             }
-            else if ((wall.Segments & WallSegments.VerticalDiag) > 0 && wall.TopRightStyle == 1)
+            else if ((wall.Segments & WallSegments.VerticalDiag) > 0 && WallTile.IsThickStyle(wall.TopRightStyle))
             {
                 if (direction > 0 && direction < 3)
                 {
@@ -418,7 +418,7 @@ namespace FSO.SimAntics.Utils
         {
             PatternReplaceCount filled = new PatternReplaceCount(false);
             var wall = walls[x + y * width];
-            if ((wall.Segments & WallSegments.HorizontalDiag) > 0 && (wall.TopRightStyle == 1 || floorMode))
+            if ((wall.Segments & WallSegments.HorizontalDiag) > 0 && (WallTile.IsThickStyle(wall.TopRightStyle) || floorMode))
             {
                 if (inDir < 2)
                 {
@@ -441,7 +441,7 @@ namespace FSO.SimAntics.Utils
                 }
                 if (!floorMode) walls[x + y * width] = wall;
             }
-            else if ((wall.Segments & WallSegments.VerticalDiag) > 0 && (wall.TopRightStyle == 1 || floorMode))
+            else if ((wall.Segments & WallSegments.VerticalDiag) > 0 && (WallTile.IsThickStyle(wall.TopRightStyle) || floorMode))
             {
                 if (inDir > 0 && inDir < 3)
                 {

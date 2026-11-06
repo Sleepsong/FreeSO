@@ -48,6 +48,12 @@ namespace FSO.Content
             DynamicWallFromID = new Dictionary<string, ushort>();
         }
 
+        /// <summary>
+        /// The style of a half wall (see InitGlobals): well above the 255 global styles and the ones objects add from 256,
+        /// which only last while a lot is loaded; walls keep their style as 16 bits in saves.
+        /// </summary>
+        public const ushort HalfWallStyle = 0x7F00;
+
         public ushort[] WallStyleIDs =
         {
             0x1, //wall
@@ -127,6 +133,27 @@ namespace FSO.Content
                 });
 
                 wallID++;
+            }
+
+            //The Sims 2's half wall: a low wall, wallpapered like a wall but only up to about counter height, that blocks
+            //Sims like a wall and doesn't divide rooms (like a fence). Its 2D look is the wall's walls-down one, always.
+            var wallStyle = GetWallStyle(1);
+            if (wallStyle != null)
+            {
+                this.AddWallStyle(new WallStyle
+                {
+                    ID = HalfWallStyle,
+                    WallsUpFar = wallStyle.WallsDownFar,
+                    WallsUpMedium = wallStyle.WallsDownMedium,
+                    WallsUpNear = wallStyle.WallsDownNear,
+                    WallsDownFar = wallStyle.WallsDownFar,
+                    WallsDownMedium = wallStyle.WallsDownMedium,
+                    WallsDownNear = wallStyle.WallsDownNear,
+
+                    Price = wallStyle.Price,
+                    Name = "Half Wall",
+                    Description = "A low wall, as high as a counter. Sims can't walk through it, but it doesn't divide a room."
+                });
             }
 
             DynamicStyleID = 256; //styles loaded from objects start at 256. The objd reference is dynamically altered to reference this new id, 
@@ -347,6 +374,7 @@ namespace FSO.Content
 
         public BMP GetWallStyleIcon(ushort id)
         {
+            if (id == HalfWallStyle) id = 1; //a half wall has the wall's icon
             return WallGlobals.Get<BMP>(id);
         }
 
