@@ -206,6 +206,12 @@ namespace FSO.SimAntics
 
         public abstract Vector3 VisualPosition { get; set; }
         public abstract FSO.LotView.Model.Direction Direction { get; set; }
+
+        /// <summary>Faces exactly this way (objects: without snapping to their rotation notches).</summary>
+        public virtual void SetDirectionExact(FSO.LotView.Model.Direction direction)
+        {
+            Direction = direction;
+        }
         public abstract float RadianDirection { get; set; }
 
         /// <summary>

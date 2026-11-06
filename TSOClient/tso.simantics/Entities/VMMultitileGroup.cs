@@ -305,6 +305,9 @@ namespace FSO.SimAntics.Entities
                     sub.WorldUI.GroundAlign = groundAlign;
                 }
                 sub.SetIndivPosition(offPos, direction, context, places[i]);
+                //the player placing it diagonally (the 45 degree rotation cheat): keep the diagonal, whatever the
+                //object's rotation notches say
+                if (Dir % 2 == 1 && (flags & VMPlaceRequestFlags.UserBuildableLimit) != 0) sub.SetDirectionExact(direction);
             }
 
 
@@ -350,7 +353,8 @@ namespace FSO.SimAntics.Entities
                     // ensure not counted as out of world.
                     if (sub.WorldUI.Room == 0) sub.WorldUI.Room = 65535; 
                 }
-                sub.Direction = direction;
+                if (Dir % 2 == 1) sub.SetDirectionExact(direction); //(a diagonal being placed: shown as it is)
+                else sub.Direction = direction;
                 sub.VisualPosition = pos + off;
             }
         }
