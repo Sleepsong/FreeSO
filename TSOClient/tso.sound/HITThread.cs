@@ -163,6 +163,9 @@ namespace FSO.HIT
                         {
                             var opcode = Src.Data[PC++];
                             if (opcode >= HITInterpreter.Instructions.Length) opcode = 0;
+                            if (HITInterpreter.Unimplemented.Contains(opcode))
+                                FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + Name + "' uses the sound instruction "
+                                    + HITInterpreter.Instructions[opcode].Method.Name + " (0x" + opcode.ToString("X2") + "), which does nothing here.");
                             var result = HITInterpreter.Instructions[opcode](this);
                             if (result == HITResult.HALT) return true;
                             else if (result == HITResult.KILL)
@@ -397,7 +400,14 @@ namespace FSO.HIT
                 + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ", which isn't in the sound data: nothing played.");
             var trace = FSO.Content.TS1.TS1Audio.Trace;
             if (trace == null) return;
-            if (Patch == null) trace("  '" + Name + "' has no sound for 0x" + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ": nothing played.");
+            if (Patch == null)
+            {
+                var hitlistID = ActiveTrack?.HitlistID ?? 0;
+                trace("  '" + Name + "' has no sound for 0x" + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ": nothing played (track 0x"
+                    + (ActiveTrack?.TrackID ?? 0).ToString("X8") + ", hitlist 0x" + hitlistID.ToString("X8")
+                    + ((hitlistID != 0) ? ", found " + ((audContent as FSO.Content.TS1.TS1Audio)?.HitlistSource(hitlistID, ResGroup) ?? "?")
+                        + ", " + (Hitlist?.IDs?.Count ?? 0) + " entries" : "") + ").");
+            }
             else trace("  '" + Name + "' plays " + Patch.Filename + ((sound == null) ? " (couldn't load it)" : ""));
         }
 
