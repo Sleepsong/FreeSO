@@ -34,6 +34,8 @@ namespace FSO.LotView.Components
         private IndexBuffer IndexBuffer;
         private IndexBuffer GridIndexBuffer;
         private IndexBuffer TGridIndexBuffer;
+        private int BasementGridPrimitives;
+        private IndexBuffer BasementGridIndexBuffer; //the grid over the basement's dug out tiles, drawn on its floor
         public VertexBuffer VertexBuffer;
         public float Alpha = 1f;
 
@@ -211,6 +213,9 @@ namespace FSO.LotView.Components
                 VertexBuffer.Dispose();
                 GridIndexBuffer?.Dispose();
                 TGridIndexBuffer?.Dispose();
+                BasementGridIndexBuffer?.Dispose();
+                BasementGridIndexBuffer = null;
+                BasementGridPrimitives = 0;
             }
 
             /** Convert rectangle to world units **/
@@ -269,7 +274,12 @@ namespace FSO.LotView.Components
                 }
             }
 
-            var GridIndices = (Bp.FineArea != null) ? GetGridIndicesForFine(Bp.FineArea, quads) : GetGridIndicesForArea(Bp.BuildableArea, quads);
+            //the grid on the ground leaves out the basement's dug out tiles (it would hide the basement below); they get
+            //their own, drawn on the basement's floor while it's shown
+            var buildable = (Bp.FineArea != null) ? (bool[])Bp.FineArea.Clone() : AreaTiles(Bp.BuildableArea, quads);
+            var dug = DugTiles(quads);
+            var GridIndices = GetGridIndicesForFine(Without(buildable, dug, false), quads);
+            var BasementGridIndices = (dug == null) ? new int[0] : GetGridIndicesForFine(Without(buildable, dug, true), quads);
             var TGridIndices = GetGridIndicesForArea(Bp.TargetBuildableArea, quads);
 
             VertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), Geom.Length, BufferUsage.None);
@@ -287,6 +297,13 @@ namespace FSO.LotView.Components
                 GridIndexBuffer = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, sizeof(int) * GridIndices.Length, BufferUsage.None);
                 GridIndexBuffer.SetData(GridIndices);
                 GridPrimitives = GridIndices.Length / primLength;
+            }
+
+            if (BasementGridIndices.Length > 0)
+            {
+                BasementGridIndexBuffer = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, sizeof(int) * BasementGridIndices.Length, BufferUsage.None);
+                BasementGridIndexBuffer.SetData(BasementGridIndices);
+                BasementGridPrimitives = BasementGridIndices.Length / primLength;
             }
 
             if (TGridIndices.Length > 0)
@@ -315,6 +332,37 @@ namespace FSO.LotView.Components
             var offset = (y - 1) * Size.Width + x - 1;
             if (offset < 0) return 1;
             return GrassState[offset] / 255f;
+        }
+
+        /// <summary>Which tiles are dug out for the basement (null if none are).</summary>
+        private bool[] DugTiles(int quads)
+        {
+            var map = Bp.Basement;
+            if (map == null || !map.Any) return null;
+            var result = new bool[quads * quads];
+            for (int y = 0; y < Math.Min(quads, map.Height); y++)
+                for (int x = 0; x < Math.Min(quads, map.Width); x++)
+                    result[x + y * quads] = map.Dug[x + y * map.Width] != 0;
+            return result;
+        }
+
+        /// <summary>The tiles of <paramref name="area"/> that are (or with <paramref name="keep"/> false, aren't) in <paramref name="dug"/>.</summary>
+        private static bool[] Without(bool[] area, bool[] dug, bool keep)
+        {
+            if (dug == null) return area;
+            var result = new bool[area.Length];
+            for (int i = 0; i < area.Length; i++) result[i] = area[i] && (i < dug.Length && dug[i]) == keep;
+            return result;
+        }
+
+        private static bool[] AreaTiles(Rectangle area, int quads)
+        {
+            area = Rectangle.Intersect(area, new Rectangle(0, 0, quads, quads));
+            var fine = new bool[quads * quads];
+            for (var y = 0; y < area.Height; y++)
+                for (var x = 0; x < area.Width; x++)
+                    fine[x + area.X + (y + area.Y) * quads] = true;
+            return fine;
         }
 
         private int[] GetGridIndicesForArea(Rectangle area, int quads)
@@ -629,9 +677,23 @@ namespace FSO.LotView.Components
                             Content.Content.Get().TS1 ?
                             new Vector4(1.0f, 1.0f, 1.0f, 0.8f) :
                             new Vector4(0.0f, 0.0f, 0.0f, 0.8f);
-                        device.Indices = GridIndexBuffer;
-                        pass.Apply();
-                        device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, GridPrimitives);
+                        if (world.Level == 0)
+                        {
+                            //in the basement: its grid, on its floor (a storey down), and not the ground's above it
+                            if (BasementGridPrimitives > 0)
+                            {
+                                Effect.World = Matrix.Identity * Matrix.CreateTranslation(0, (18 / 522f) * grassScale - altOff - 2.95f * 3, 0);
+                                device.Indices = BasementGridIndexBuffer;
+                                pass.Apply();
+                                device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, BasementGridPrimitives);
+                            }
+                        }
+                        else
+                        {
+                            device.Indices = GridIndexBuffer;
+                            pass.Apply();
+                            device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, GridPrimitives);
+                        }
                     }
                     else
                     {
@@ -864,6 +926,7 @@ namespace FSO.LotView.Components
                 VertexBuffer.Dispose();
                 GridIndexBuffer?.Dispose();
                 TGridIndexBuffer?.Dispose();
+                BasementGridIndexBuffer?.Dispose();
                 GridTex?.Dispose();
             }
         }
