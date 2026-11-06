@@ -224,18 +224,30 @@ namespace FSO.Content.TS1
                 //.Select(x => x.Key + ": " + new string(new char[] { (char)(x.Value.TrackID & 0xFF), (char)((x.Value.TrackID >> 8) & 0xFF), (char)((x.Value.TrackID >> 16) & 0xFF), (char)((x.Value.TrackID >> 24) & 0xFF) })).ToList();
         }
 
+        //A sound file's tracks can use hitlists, tracks and sounds that another sound file defines (a Sim's voice lines:
+        //the track picks a line from a hitlist). Only the event's own file was looked in, so those played nothing. Its
+        //own file still comes first; the tables of every file, loaded in Init, are the fallback.
+
         public Hitlist GetHitlist(uint InstanceID, HITResourceGroup group)
         {
             Hitlist result = null;
-            group.hot.Hitlists.TryGetValue(InstanceID, out result);
+            if (!group.hot.Hitlists.TryGetValue(InstanceID, out result)) HitlistsById.TryGetValue(InstanceID, out result);
             return result;
         }
 
         public Track GetTrack(uint value, uint fallback, HITResourceGroup group)
         {
             Track result = null;
-            group.hot.Tracks.TryGetValue(value, out result);
+            if (!group.hot.Tracks.TryGetValue(value, out result)) TracksById.TryGetValue(value, out result);
             return result;
+        }
+
+        /// <summary>Where a hitlist is defined, for the sound log: the event's own sound file, another, or none.</summary>
+        public string HitlistSource(uint InstanceID, HITResourceGroup group)
+        {
+            if (group?.hot?.Hitlists?.ContainsKey(InstanceID) == true) return "in its own sound file";
+            if (HitlistsById.ContainsKey(InstanceID)) return "in another sound file";
+            return "nowhere";
         }
 
         public SoundEffect GetSFX(Patch patch)
@@ -310,7 +322,7 @@ namespace FSO.Content.TS1
         public Patch GetPatch(uint id, HITResourceGroup group)
         {
             Patch result = null;
-            group.hot.Patches.TryGetValue(id, out result);
+            if (!group.hot.Patches.TryGetValue(id, out result)) PatchesById.TryGetValue(id, out result);
             return result;
         }
     }

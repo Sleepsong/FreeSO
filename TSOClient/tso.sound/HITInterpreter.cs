@@ -25,6 +25,28 @@ namespace FSO.HIT
         /// <summary>
         /// Does nothing.
         /// </summary>
+        /// <summary>
+        /// Instructions that do nothing here: each is noted the first time a sound uses it (TS1Audio.Note), since a sound
+        /// that relies on one can play nothing, or the wrong thing. Several also don't read their operands.
+        /// </summary>
+        public static readonly System.Collections.Generic.HashSet<byte> Unimplemented = BuildUnimplemented();
+
+        private static System.Collections.Generic.HashSet<byte> BuildUnimplemented()
+        {
+            var names = new System.Collections.Generic.HashSet<string> {
+                "Note", "NoteOff", "CallEntryPoint", "Less", "Greater", "Not", "Abs", "Error", "Assert", "AddToGroup",
+                "RemoveFromGroup", "GetVar", "Callback", "SmartAdd", "SmartRemove", "SmartRemoveAll", "SmartSetCrit",
+                "And", "NAnd", "Or", "NOr", "XOr", "Inc", "Dec", "PrintReg", "PlayTrack", "KillTrack", "Push", "PushMask",
+                "PushVars", "CallMask", "CallPush", "Pop", "Test1", "Test2", "Test3", "Test4", "SeqGroupWait",
+                "SeqGroupReturn", "SeqGroupTrackID", "SetLT", "SetTL", "WaitNotEqual", "WaitGreater", "WaitLess",
+                "WaitGreatOrEq", "WaitLessOrEq", "TestX", "Throw", "SetSrcDataField", "StopTrack", "SetChanReg",
+                "PlayNote", "StopNote", "KillNote" };
+            var result = new System.Collections.Generic.HashSet<byte>();
+            for (int i = 0; i < Instructions.Length; i++)
+                if (names.Contains(Instructions[i].Method.Name)) result.Add((byte)i);
+            return result;
+        }
+
         public static HITResult NOP(HITThread thread)
         {
             return HITResult.CONTINUE;
