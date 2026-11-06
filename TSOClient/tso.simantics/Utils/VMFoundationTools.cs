@@ -64,12 +64,12 @@ namespace FSO.SimAntics.Utils
                     {
                         if (map.Raise[i] == height) continue;
                         map.Raise[i] = height;
-                        map.Pattern[i] = pattern;
+                        map.SetAllSides(i, pattern);
                     }
                     else
                     {
                         map.Raise[i] = 0;
-                        map.Pattern[i] = 0;
+                        map.SetAllSides(i, 0);
                     }
                 }
             }
@@ -80,10 +80,7 @@ namespace FSO.SimAntics.Utils
                 for (int y = y1 - 1; y <= y2 + 1; y++)
                     for (int x = x1 - 1; x <= x2 + 1; x++)
                         if (map.InBounds(x, y) && map.Steps[y * map.Width + x] != 0 && map.StepTop(x, y) == 0)
-                        {
                             map.Steps[y * map.Width + x] = 0;
-                            map.Pattern[y * map.Width + x] = 0;
-                        }
             }
 
             arch.SignalFoundationChange();
@@ -105,7 +102,6 @@ namespace FSO.SimAntics.Utils
                 if (map.Steps[i] == 0) return 0;
                 if (Blocked(arch, tile.X, tile.Y)) { arch.LastFailReason = FailBlocked; return 0; }
                 map.Steps[i] = 0;
-                map.Pattern[i] = 0;
                 arch.SignalFoundationChange();
                 return -1;
             }
@@ -122,9 +118,62 @@ namespace FSO.SimAntics.Utils
 
             var wasSteps = map.Steps[i] != 0;
             map.Steps[i] = (byte)(dir + 1);
-            map.Pattern[i] = map.Pattern[(tile.Y + to.Y) * map.Width + tile.X + to.X];
             arch.SignalFoundationChange();
             return wasSteps ? 0 : 1;
+        }
+
+        /// <summary>The side direction a paint command gives for every side of the foundation a tile is part of.</summary>
+        public const int PaintWholeFoundation = 255;
+
+        /// <summary>
+        /// Paints a wall covering (0 for plain concrete) on a foundation's side, as walls are painted: side
+        /// <paramref name="dir"/> (see <see cref="FoundationMap.Directions"/>) of the tile, or with
+        /// <see cref="PaintWholeFoundation"/> every showing side of the foundation the tile is part of (all the raised tiles
+        /// joined to it). Only sides that show can be painted. Returns how many sides changed.
+        /// </summary>
+        public static int PaintSides(VMArchitecture arch, Point tile, int dir, ushort pattern)
+        {
+            var map = arch.Terrain.Foundations;
+            if (map == null || !map.InBounds(tile.X, tile.Y) || map.RaiseOf(tile.X, tile.Y) <= 0) return 0;
+            int changed = 0;
+            if (dir != PaintWholeFoundation)
+            {
+                if (dir < 0 || dir > 3 || !map.SideShows(tile.X, tile.Y, dir)) return 0;
+                var index = map.SideIndex(tile.X, tile.Y, dir);
+                if (map.Sides[index] == pattern) return 0;
+                map.Sides[index] = pattern;
+                changed = 1;
+            }
+            else
+            {
+                //every raised tile joined to this one (through raised neighbours), and each of their showing sides
+                var seen = new bool[map.Width * map.Height];
+                var todo = new System.Collections.Generic.Stack<Point>();
+                todo.Push(tile);
+                seen[tile.Y * map.Width + tile.X] = true;
+                while (todo.Count > 0)
+                {
+                    var t = todo.Pop();
+                    for (int d = 0; d < 4; d++)
+                    {
+                        if (map.SideShows(t.X, t.Y, d))
+                        {
+                            var index = map.SideIndex(t.X, t.Y, d);
+                            if (map.Sides[index] != pattern)
+                            {
+                                map.Sides[index] = pattern;
+                                changed++;
+                            }
+                        }
+                        var n = new Point(t.X + FoundationMap.Directions[d].X, t.Y + FoundationMap.Directions[d].Y);
+                        if (!map.InBounds(n.X, n.Y) || map.RaiseOf(n.X, n.Y) <= 0 || seen[n.Y * map.Width + n.X]) continue;
+                        seen[n.Y * map.Width + n.X] = true;
+                        todo.Push(n);
+                    }
+                }
+            }
+            if (changed > 0) arch.SignalFoundationChange();
+            return changed;
         }
 
         /// <summary>The direction from a tile to a foundation beside it (the highest one), or -1.</summary>

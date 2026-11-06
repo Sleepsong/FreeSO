@@ -188,6 +188,76 @@ namespace FSO.LotView.Model
             return (AltitudeCenters[((y % Height) * Width + (x % Width))] - BaseAlt + raise) * TerrainFactor;
         }
 
+        /// <summary>
+        /// The foundation side a camera ray meets first (world units, as <see cref="WorldState.CameraRayAtScreenPos"/> gives
+        /// for the ground floor): its tile, and which side (see <see cref="FoundationMap.Directions"/>). Only sides that
+        /// show, facing the camera; a foundation's top in front of one hides it. For painting coverings on.
+        /// </summary>
+        public bool FoundationSideAt(Ray ray, out Point tile, out int dir)
+        {
+            tile = Point.Zero;
+            dir = -1;
+            var map = Foundations;
+            if (map == null || !map.Any || Altitude == null) return false;
+            var p = ray.Position / 3; //tile units, and the same distance along the ray
+            var v = ray.Direction / 3;
+            Func<int, int, float> ground = (gx, gy) =>
+            {
+                gx = Math.Max(0, Math.Min(Width - 1, gx));
+                gy = Math.Max(0, Math.Min(Height - 1, gy));
+                return (Altitude[gy * Width + gx] - BaseAlt) * TerrainFactor;
+            };
+            float best = float.MaxValue;
+            bool found = false;
+            for (int y = 0; y < map.Height; y++)
+            {
+                for (int x = 0; x < map.Width; x++)
+                {
+                    var raise = map.RaiseOf(x, y);
+                    if (raise <= 0) continue;
+                    var r = raise * TerrainFactor;
+
+                    // its top (level, at the corners' average)
+                    if (v.Y != 0)
+                    {
+                        var h = (ground(x, y) + ground(x + 1, y) + ground(x, y + 1) + ground(x + 1, y + 1)) / 4 + r;
+                        var t = (h - p.Y) / v.Y;
+                        var q = p + v * t;
+                        if (t > 0 && t < best && q.X >= x && q.X <= x + 1 && q.Z >= y && q.Z <= y + 1)
+                        {
+                            best = t;
+                            found = false;
+                        }
+                    }
+
+                    for (int d = 0; d < 4; d++)
+                    {
+                        if (!map.SideShows(x, y, d)) continue;
+                        var n = FoundationMap.Directions[d];
+                        if (n.X * v.X + n.Y * v.Z >= 0) continue; //facing away
+                        Components.Geometry.Modelled3DFoundation.EdgeEnds(x, y, d, out var a, out var b);
+                        float t;
+                        if (n.X != 0) t = (a.X - p.X) / v.X;
+                        else t = (a.Y - p.Z) / v.Z;
+                        if (t <= 0 || t >= best) continue;
+                        var q = p + v * t;
+                        // how far along the edge, from a to b
+                        float along = (n.X != 0) ? (q.Z - a.Y) / (b.Y - a.Y) : (q.X - a.X) / (b.X - a.X);
+                        if (along < 0 || along > 1) continue;
+                        var g = ground(a.X, a.Y) * (1 - along) + ground(b.X, b.Y) * along;
+                        var bottom = g + (raise - map.SideDrop(x, y, d)) * TerrainFactor;
+                        if (q.Y < bottom || q.Y > g + r) continue;
+                        best = t;
+                        found = true;
+                        tile = new Point(x, y);
+                        dir = d;
+                    }
+                }
+            }
+            if (!found) dir = -1;
+            return found;
+        }
+
         /// <summary>The highest foundation (in height, like <see cref="InterpAltitude"/>) within <paramref name="radius"/> tiles of a point.</summary>
         public float FoundationNear(float x, float y, float radius)
         {

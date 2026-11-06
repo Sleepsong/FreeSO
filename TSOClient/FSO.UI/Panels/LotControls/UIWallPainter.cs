@@ -76,6 +76,13 @@ namespace FSO.Client.UI.Panels.LotControls
             vm.Context.Architecture.SignalRedraw();
         }
 
+        /// <summary>A command that paints a whole room's walls or a whole foundation's sides (with shift).</summary>
+        private static bool IsFill(VMArchitectureCommand cmd)
+        {
+            return cmd.Type == VMArchitectureCommandType.PATTERN_FILL
+                || (cmd.Type == VMArchitectureCommandType.FOUNDATION_PAINT && cmd.x2 == VMFoundationTools.PaintWholeFoundation);
+        }
+
         public override void Update(UpdateState state, bool scrolled)
         {
             ushort pattern = (Modifiers.IsSet(UILotControlModifiers.CTRL)) ? (ushort)0 : Pattern;
@@ -88,7 +95,45 @@ namespace FSO.Client.UI.Panels.LotControls
                 vm.Context.Architecture.SignalRedraw();
                 Commands.Clear();
             }
-            if (Modifiers.IsSet(UILotControlModifiers.SHIFT))
+
+            //a foundation's side under the cursor (on the ground floor) is painted like a wall: one side, or with shift
+            //every side of that foundation
+            Point fTile = Point.Zero;
+            int fDir = -1;
+            var onFoundation = World.State.Level == 1 && vm.Context.Blueprint != null
+                && vm.Context.Blueprint.FoundationSideAt(World.State.CameraRayAtScreenPos(new Vector2(MousePosition.X, MousePosition.Y), 1), out fTile, out fDir);
+            if (onFoundation)
+            {
+                var whole = Modifiers.IsSet(UILotControlModifiers.SHIFT);
+                var cmd = new VMArchitectureCommand
+                {
+                    Type = VMArchitectureCommandType.FOUNDATION_PAINT,
+                    level = 1,
+                    pattern = pattern,
+                    x = fTile.X,
+                    y = fTile.Y,
+                    x2 = whole ? VMFoundationTools.PaintWholeFoundation : fDir
+                };
+                if (whole || (Commands.Count > 0 && IsFill(Commands[0])))
+                {
+                    //a fill replaces anything else
+                    if (Commands.Count != 1 || !Commands[0].Equals(cmd))
+                    {
+                        Commands.Clear();
+                        vm.Context.Architecture.SignalRedraw();
+                        Commands.Add(cmd);
+                    }
+                }
+                else if (!Commands.Contains(cmd))
+                {
+                    vm.Context.Architecture.SignalRedraw();
+                    Commands.Add(cmd);
+                }
+                //the roller faces the side: its wall direction is one on from the foundation's
+                CursorDir = (fDir + 2) % 4;
+                cursor = fTile;
+            }
+            else if (Modifiers.IsSet(UILotControlModifiers.SHIFT))
             {
                 if (Commands.Count == 0 || Commands[0].Type != VMArchitectureCommandType.PATTERN_FILL)
                 {
@@ -106,7 +151,7 @@ namespace FSO.Client.UI.Panels.LotControls
                 }
             } else
             {
-                if (Commands.Count > 0 && Commands[0].Type == VMArchitectureCommandType.PATTERN_FILL)
+                if (Commands.Count > 0 && IsFill(Commands[0]))
                 {
                     Commands.Clear();
                     vm.Context.Architecture.SignalRedraw();

@@ -671,6 +671,13 @@ namespace FSO.SimAntics
                         if (sCount > 0) cost += sCount * FoundationStepsPrice;
                         else if (sCount < 0) cost += sCount * FoundationStepsSellback;
                         break;
+                    case VMArchitectureCommandType.FOUNDATION_PAINT:
+                        //a wall covering on a foundation's sides, priced as on walls (plain concrete is free)
+                        var fpPattern = GetPatternRef(com.pattern);
+                        if (fpPattern == null && com.pattern != 0) break;
+                        var painted = VMFoundationTools.PaintSides(this, new Point(com.x, com.y), com.x2, com.pattern);
+                        if (painted > 0 && fpPattern != null) cost += fpPattern.Price * painted;
+                        break;
                 }
             }
             if (lastAvatar != null && pdCount > 0)
