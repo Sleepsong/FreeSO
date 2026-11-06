@@ -871,6 +871,7 @@ namespace FSO.SimAntics.Engine
 
         private bool ExecuteAction(VMQueuedAction action)
         {
+            Model.TS1Platform.VMTryForBaby.OnActionStart(Entity, action);
             //set the new interaction's priority
             ((VMAvatar)Entity).SetPersonData(VMPersonDataVariable.Priority, action.Priority);
             var frame = action.ToStackFrame(Entity);

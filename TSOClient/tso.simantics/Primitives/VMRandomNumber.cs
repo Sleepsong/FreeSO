@@ -10,8 +10,10 @@ namespace FSO.SimAntics.Engine.Primitives
         {
             var operand = (VMRandomNumberOperand)args;
             var rangeValue = (ushort)VMMemory.GetVariable(context, operand.RangeScope, operand.RangeData);
-            var result = context.VM.Context.NextRandom(rangeValue);
-            VMMemory.SetVariable(context, operand.DestinationScope, operand.DestinationData, (short)result);
+            var result = (short)context.VM.Context.NextRandom(rangeValue);
+            var steered = FSO.SimAntics.Model.TS1Platform.VMTryForBaby.SteerRandom(context, rangeValue); //(only while trying for a baby)
+            if (steered != null) result = (short)steered.Value;
+            VMMemory.SetVariable(context, operand.DestinationScope, operand.DestinationData, result);
             return VMPrimitiveExitCode.GOTO_TRUE;
         }
     }

@@ -433,6 +433,7 @@ namespace FSO.SimAntics
             {
                 Scheduler.RunTick();
             }
+            if (TS1) Model.TS1Platform.VMTryForBaby.Tick(this);
 
             if (tickID % Math.Max(1, SpeedMultiplier) == 0) Context.ProcessLightingChanges();
             //Context.SetToNextCache.VerifyPositions(); use only for debug!

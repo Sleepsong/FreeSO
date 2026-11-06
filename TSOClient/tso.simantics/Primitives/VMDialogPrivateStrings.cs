@@ -35,6 +35,7 @@ namespace FSO.SimAntics.Primitives
                 //we cannot pause the rest of the tick as soon as we hit a blocking dialog, and we cannot show more than one blocking dialog.
                 //so additional blocking dialogs must wait.
                 if (context.VM.TS1 && context.VM.GlobalBlockingDialog != null) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
+                if (context.VM.TS1) Model.TS1Platform.VMTryForBaby.OnDialog(context, operand, table);
                 VMDialogHandler.ShowDialog(context, operand, table);
 
                 if ((operand.Flags & VMDialogFlags.Continue) == 0)

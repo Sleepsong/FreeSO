@@ -939,6 +939,7 @@ namespace FSO.SimAntics
                 ttas = vm.Context.GlobalTTAs;
             }
             var id = ia.TTAIndex;
+            if (!Model.TS1Platform.VMTryForBaby.Allowed(vm, caller, this, ia)) return null;
             var action = GetAction((int)id, caller, vm.Context, global);
 
             caller.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
@@ -980,6 +981,7 @@ namespace FSO.SimAntics
         public List<VMPieMenuInteraction> GetPieMenu(VM vm, VMEntity caller, bool includeHidden, bool includeGlobal)
         {
             var pie = new List<VMPieMenuInteraction>();
+            Model.TS1Platform.VMTryForBaby.Prepare(vm, this); //Try for Baby, on Sims in The Sims 1
             if (TreeTable == null) return pie;
 
             var myLength = TreeTable.Interactions.Length;
@@ -1001,6 +1003,7 @@ namespace FSO.SimAntics
                     global = true;
                 }
                 var id = ia.TTAIndex;
+                if (!global && !Model.TS1Platform.VMTryForBaby.Allowed(vm, caller, this, ia)) continue;
                 var action = GetAction((int)id, caller, vm.Context, global);
 
                 caller.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
