@@ -37,6 +37,9 @@ namespace FSO.LotView.RC
             return WallStyleCache[id];
         }
 
+        /// <summary>How many times all the walls have been made again (they changed): a second view's own walls follow it.</summary>
+        public int FullGenerations;
+
         public static Vector2[] CutCheckDir =
         {
             new Vector2(-1,-1),
@@ -64,7 +67,7 @@ namespace FSO.LotView.RC
         {
             var wallContent = Content.Content.Get().WorldWalls;
             var floorContent = Content.Content.Get().WorldFloors;
-            if (!cutaway) Dispose();
+            if (!cutaway) { Dispose(); FullGenerations++; }
             var white = Color.White.ToVector4();
             var whitepx = Common.Utils.TextureGenerator.GetPxWhite(device);
             var darker = new Vector4(0.85f, 0.85f, 0.85f, 1);
