@@ -63,13 +63,15 @@ namespace FSO.SimAntics
 
         /// <summary>
         /// Objects with Hide For Cutaway (TS1's windows set it) aren't drawn where their wall is cut. TS1's doors don't set
-        /// it, but are hidden on cut walls all the same, leaving the doorway open in the low walls; otherwise the whole
-        /// door, frame and all, stood at full height among them. TSO's doors stay up.
+        /// it, but are hidden in cut walls all the same, leaving the doorway open in the low walls; otherwise the whole
+        /// door, frame and all, stood at full height among them. Only in walls, which cut: gates in fences stay. TSO's doors
+        /// stay up.
         /// </summary>
         private void RefreshHideForCutaway(VMEntityFlags flags, VMEntityFlags2 flags2)
         {
-            ((ObjectComponent)WorldUI).HideForCutaway = (flags & VMEntityFlags.HideForCutaway) > 0
-                || (VM.GlobTS1 && (flags2 & VMEntityFlags2.ArchitectualDoor) > 0);
+            var component = (ObjectComponent)WorldUI;
+            component.HideForCutaway = (flags & VMEntityFlags.HideForCutaway) > 0;
+            component.HideForCutawayInWall = VM.GlobTS1 && (flags2 & VMEntityFlags2.ArchitectualDoor) > 0;
         }
 
         public bool RefreshGraphic()

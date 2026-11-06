@@ -36,6 +36,11 @@ namespace FSO.LotView.Components
         protected float ZOrder;
 
         public bool HideForCutaway;
+        /// <summary>
+        /// Hidden where the wall it's in is cut, as walls with Hide For Cutaway are, but only in a thick (cuttable) wall:
+        /// TS1's doors. A gate in a fence stays, as fences aren't cut.
+        /// </summary>
+        public bool HideForCutawayInWall;
         public WallSegments AdjacentWall;
 
         //for ultra lighting in 2d. objects can have a shadow component which handles drawing in 3d.
@@ -450,7 +455,7 @@ namespace FSO.LotView.Components
             }
             else _IdleFramesPct = 0;
 
-            if (HideForCutaway && Level > 0)
+            if ((HideForCutaway || HideForCutawayInWall) && Level > 0)
             {
                 if (!(world.BuildMode > 1) && world.DynamicCutaway && Level == world.Level)
                 {
@@ -466,13 +471,15 @@ namespace FSO.LotView.Components
                     {
                         var wall = blueprint.Walls[Level - 1][tilePos.Y * blueprint.Width + tilePos.X];
                         var cutTest = new Point();
-                        if (!CutawayTests.TryGetValue(AdjacentWall & wall.Segments, out cutTest))
+                        var side = AdjacentWall & wall.Segments;
+                        if (!CutawayTests.TryGetValue(side, out cutTest))
                         {
-                            CutawayTests.TryGetValue(wall.OccupiedWalls & wall.Segments, out cutTest);
+                            side = wall.OccupiedWalls & wall.Segments;
+                            CutawayTests.TryGetValue(side, out cutTest);
                         }
                         var positions = new Point[] { tilePos, tilePos + cutTest };
 
-                        var canContinue = true;
+                        var canContinue = HideForCutaway || InThickWall(wall, side, tilePos);
 
                         foreach (var pos in positions)
                         {
@@ -483,6 +490,28 @@ namespace FSO.LotView.Components
                         CutawayHidden = canContinue;
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Whether the wall on this side of the tile is thick, so cut with the walls (fences aren't). With no single side
+        /// known, whether any wall at the tile is.
+        /// </summary>
+        private bool InThickWall(WallTile wall, WallSegments side, Point tile)
+        {
+            var level = (sbyte)Level;
+            bool bottomLeft() => tile.Y + 1 < blueprint.Height && blueprint.GetWall((short)tile.X, (short)(tile.Y + 1), level).TopRightThick;
+            bool bottomRight() => tile.X + 1 < blueprint.Width && blueprint.GetWall((short)(tile.X + 1), (short)tile.Y, level).TopLeftThick;
+            switch (side)
+            {
+                case WallSegments.TopLeft: return wall.TopLeftThick;
+                case WallSegments.TopRight: return wall.TopRightThick;
+                case WallSegments.BottomLeft: return bottomLeft();
+                case WallSegments.BottomRight: return bottomRight();
+                default:
+                    return wall.TopLeftThick || wall.TopRightThick
+                        || ((wall.Segments & WallSegments.BottomLeft) > 0 && bottomLeft())
+                        || ((wall.Segments & WallSegments.BottomRight) > 0 && bottomRight());
             }
         }
 

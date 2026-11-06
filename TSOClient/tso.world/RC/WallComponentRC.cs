@@ -94,21 +94,29 @@ namespace FSO.LotView.RC
 
                 var rMap = blueprint.RoomMap[level - 1];
 
+                var forceUp = false; //drawing a door's wall: full height
                 Func<Vector3, float> GetWallHeight = (Vector3 pos) =>
                 {
                     if (level != world.Level) return 1;
                     pos.X += xz.X; pos.Y += xz.Y;
                     var index = (int)pos.Y * blueprint.Width + (int)pos.X;
+                    if (forceUp) return 1;
                     if (index < 0 || index >= blueprint.Cutaway.Length) return 1;
                     return allowCut && blueprint.Cutaway[index] ? 0.12f : 1;
                 };
 
-                //A wall with a door in it isn't thick, so it's drawn as a full height "fence" plane with the door's shape
-                //cut out of it, from both sides, and fences ignore the cut height. Where the walls are cut (walls down, or
-                //cutaway), the 2D walls (WallComponent) leave a door's wall out; drawing it here stood a full height
-                //doorway, a line of wall, among the cut walls. from and to are the wall's ends within tile x, y.
-                Func<int, int, Vector2, Vector2, bool> doorCut = (int x, int y, Vector2 from, Vector2 to) =>
-                    GetWallHeight(new Vector3(x + (from.X + to.X) / 2, y + (from.Y + to.Y) / 2, 0)) < 1;
+                //Walls with doors in them, as the 2D walls (WallComponent.GenerateWallData) draw them: a door's wall is left
+                //out where the tiles on both sides of it are cut (the door is hidden for cutaway there too), and is otherwise
+                //drawn at full height around the door, never cut down or sloped. Here they were cut like any wall, a point at
+                //a time, so where the cut ended at a doorway the door's wall stood or sloped up from the low walls: a line.
+                Func<int, int, bool> cutAt = (int tx, int ty) =>
+                    level == world.Level && allowCut && tx >= 0 && ty >= 0 && tx < blueprint.Width && ty < blueprint.Height
+                    && blueprint.Cutaway[ty * blueprint.Width + tx];
+                Func<int, int, bool> tlGone = (int tx, int ty) => blueprint.GetWall((short)tx, (short)ty, level).TopLeftDoor && cutAt(tx, ty) && cutAt(tx - 1, ty);
+                Func<int, int, bool> trGone = (int tx, int ty) => blueprint.GetWall((short)tx, (short)ty, level).TopRightDoor && cutAt(tx, ty) && cutAt(tx, ty - 1);
+                //thick, and drawn: a gone door's wall leaves the walls either side of it open, so they're capped
+                Func<int, int, bool> tlThick = (int tx, int ty) => blueprint.GetWall((short)tx, (short)ty, level).TopLeftThick && !tlGone(tx, ty);
+                Func<int, int, bool> trThick = (int tx, int ty) => blueprint.GetWall((short)tx, (short)ty, level).TopRightThick && !trGone(tx, ty);
 
                 Action<int, int, Vector2, Vector2, ushort, ushort, int, float, float, float> addLineGeom = (int x, int y, Vector2 from, Vector2 to, ushort pattern, ushort style, int topMode, float starttc, float endtc, float aboveFloor) => {
                     var tex = world._2D.GetTexture(GetPattern(pattern)?.Near?.Frames[2]);
@@ -183,18 +191,23 @@ namespace FSO.LotView.RC
                             float bleedLight = (level == 1 || blueprint.GetFloor(x, y, level).Pattern != 0 || HasRoof(x, y, level)) ? 0 : 1;
                             if ((comp.Segments & WallSegments.TopLeft) > 0)
                             {
-                                if (comp.TopLeftThick)
+                                if (comp.TopLeftThick && tlGone(x, y)) { }
+                                else if (comp.TopLeftThick)
                                 {
+                                    //a door's wall stands full height: cap it where the wall it meets is cut down
+                                    var lowBack = comp.TopLeftDoor && GetWallHeight(new Vector3(x + thickness, y, 0)) < 1;
+                                    var lowFront = comp.TopLeftDoor && GetWallHeight(new Vector3(x + thickness, y + 1, 0)) < 1;
+                                    forceUp = comp.TopLeftDoor;
                                     float extentBack = 0;
                                     float extentFront = 0;
                                     float bleedLight2 = (level == 1 || blueprint.GetFloor((short)(x-1), y, level).Pattern != 0 || HasRoof(x-1, y, level)) ? 0 : 1;
-                                    if (y > 0 && !blueprint.GetWall(x, (short)(y - 1), level).TopLeftThick)
+                                    if (y > 0 && (!tlThick(x, y - 1) || lowBack))
                                     {
                                         extentBack = -thickness;
                                         //cap this end
                                         addLineGeom(x, y, new Vector2(thickness, extentBack + 0.005f), new Vector2(-thickness, extentBack + 0.005f), comp.TopLeftPattern, 1, 5, 0, thickness * 2, bleedLight);
                                     }
-                                    if (y < blueprint.Height - 1 && !blueprint.GetWall(x, (short)(y + 1), level).TopLeftThick)
+                                    if (y < blueprint.Height - 1 && (!tlThick(x, y + 1) || lowFront))
                                     {
                                         extentFront = thickness;
                                         //cap this end
@@ -203,8 +216,9 @@ namespace FSO.LotView.RC
                                     if (x > 0)
                                         addLineGeom(x, y, new Vector2(-thickness, extentBack), new Vector2(-thickness, 1 + extentFront), blueprint.GetWall((short)(x - 1), y, level).BottomRightPattern, (comp.ObjSetTLStyle == 0) ? comp.TopLeftStyle : comp.ObjSetTLStyle, 5, -(0 + extentBack), -(1 + extentFront), bleedLight2);
                                     addLineGeom(x, y, new Vector2(thickness, 1+extentFront), new Vector2(thickness, extentBack), comp.TopLeftPattern, (comp.ObjSetTLStyle == 0) ? comp.TopLeftStyle : comp.ObjSetTLStyle, 0, 0-extentFront, 1-extentBack, bleedLight);
+                                    forceUp = false;
                                 }
-                                else if (!(comp.TopLeftDoor && doorCut(x, y, new Vector2(0, 1), new Vector2(0, 0))))
+                                else
                                 {
                                     //fence tl
                                     addLineGeom(x, y, new Vector2(0, 1), new Vector2(0, 0), comp.TopLeftPattern, (comp.ObjSetTLStyle == 0) ? comp.TopLeftStyle : comp.ObjSetTLStyle, 4, 0, 1, bleedLight);
@@ -212,18 +226,22 @@ namespace FSO.LotView.RC
                             }
                             if ((comp.Segments & WallSegments.TopRight) > 0)
                             {
-                                if (comp.TopRightThick)
+                                if (comp.TopRightThick && trGone(x, y)) { }
+                                else if (comp.TopRightThick)
                                 {
+                                    var lowBack = comp.TopRightDoor && GetWallHeight(new Vector3(x, y + thickness, 0)) < 1;
+                                    var lowFront = comp.TopRightDoor && GetWallHeight(new Vector3(x + 1, y + thickness, 0)) < 1;
+                                    forceUp = comp.TopRightDoor;
                                     float extentBack = 0;
                                     float extentFront = 0;
                                     float bleedLight2 = (level == 1 || blueprint.GetFloor(x, (short)(y-1), level).Pattern != 0 || HasRoof(x, y-1, level)) ? 0 : 1;
-                                    if (x > 0 && !blueprint.GetWall((short)(x - 1), y, level).TopRightThick)
+                                    if (x > 0 && (!trThick(x - 1, y) || lowBack))
                                     {
                                         extentBack = -thickness;
                                         //cap this end
                                         addLineGeom(x, y, new Vector2(extentBack+0.005f, -thickness), new Vector2(extentBack + 0.005f, thickness), comp.TopRightPattern, 1, 5, 0, thickness*2, bleedLight);
                                     }
-                                    if (x < blueprint.Width - 1 && !blueprint.GetWall((short)(x + 1), y, level).TopRightThick)
+                                    if (x < blueprint.Width - 1 && (!trThick(x + 1, y) || lowFront))
                                     {
                                         extentFront = thickness;
                                         //cap this end
@@ -232,8 +250,9 @@ namespace FSO.LotView.RC
                                     if (y > 0)
                                         addLineGeom(x, y, new Vector2(1 + extentFront, -thickness), new Vector2(extentBack, -thickness), blueprint.GetWall(x, (short)(y - 1), level).BottomLeftPattern, (comp.ObjSetTRStyle == 0) ? comp.TopRightStyle : comp.ObjSetTRStyle, 5, extentFront, -(1 - extentBack), bleedLight2);
                                     addLineGeom(x, y, new Vector2(extentBack, thickness), new Vector2(1+extentFront, thickness), comp.TopRightPattern, (comp.ObjSetTRStyle == 0) ? comp.TopRightStyle : comp.ObjSetTRStyle, 1, extentBack, 1+extentFront, bleedLight);
+                                    forceUp = false;
                                 }
-                                else if (!(comp.TopRightDoor && doorCut(x, y, new Vector2(0, 0), new Vector2(1, 0))))
+                                else
                                 {
                                     //fence tr
                                     addLineGeom(x, y, new Vector2(0, 0), new Vector2(1, 0), comp.TopRightPattern, (comp.ObjSetTRStyle == 0) ? comp.TopRightStyle : comp.ObjSetTRStyle, 4, 0, 1, bleedLight);
@@ -244,7 +263,7 @@ namespace FSO.LotView.RC
                             {
                                 //fence bl
                                 var comp2 = blueprint.GetWall(x, (short)(y + 1), level);
-                                if (!comp2.TopRightThick && !(comp2.TopRightDoor && doorCut(x, y, new Vector2(1, 1), new Vector2(0, 1))))
+                                if (!comp2.TopRightThick)
                                     addLineGeom(x, y, new Vector2(1, 1), new Vector2(0, 1), comp.BottomLeftPattern, (comp2.ObjSetTRStyle == 0) ? comp2.TopRightStyle : comp.ObjSetTRStyle, 4, 0, 1, bleedLight);
                             }
                             if ((comp.Segments & WallSegments.BottomRight) > 0 && x < blueprint.Width)
@@ -252,7 +271,7 @@ namespace FSO.LotView.RC
                                 //fence br
 
                                 var comp2 = blueprint.GetWall((short)(x + 1), y, level);
-                                if (!comp2.TopLeftThick && !(comp2.TopLeftDoor && doorCut(x, y, new Vector2(1, 0), new Vector2(1, 1))))
+                                if (!comp2.TopLeftThick)
                                     addLineGeom(x, y, new Vector2(1, 0), new Vector2(1, 1), comp.BottomRightPattern, (comp2.ObjSetTLStyle == 0) ? comp2.TopLeftStyle : comp2.ObjSetTLStyle, 4, 0, 1, bleedLight);
                             }
 
