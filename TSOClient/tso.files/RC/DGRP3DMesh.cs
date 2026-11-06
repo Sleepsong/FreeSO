@@ -321,7 +321,7 @@ namespace FSO.Files.RC
 
         private void CompleteFSOMLoad(GraphicsDevice gd)
         {
-            BuildBasinMask(UnloadedGeoms.SelectMany(x => x), gd);
+            BuildBasinVolume(UnloadedGeoms.SelectMany(x => x), gd);
             foreach (var group in UnloadedGeoms)
             {
                 var d = new Dictionary<Texture2D, DGRP3DGeometry>();
@@ -342,7 +342,7 @@ namespace FSO.Files.RC
                 Geoms.Add(d);
             }
 
-            if (MaskType != DGRP3DMaskType.Basin) DepthMask?.CompleteFSOMLoad(gd); //a basin mask is already complete
+            DepthMask?.CompleteFSOMLoad(gd);
         }
 
         public string SaveDirectory;
@@ -786,7 +786,7 @@ namespace FSO.Files.RC
         {
             Bounds = (BoundPts.Count == 0) ? new BoundingBox() : BoundingBox.CreateFromPoints(BoundPts);
             BoundPts = null;
-            BuildBasinMask(Geoms.SelectMany(x => x.Values), gd);
+            BuildBasinVolume(Geoms.SelectMany(x => x.Values), gd);
             SaveAsync(this);
             foreach (var g in Geoms)
                 foreach (var e in g)
@@ -832,10 +832,8 @@ namespace FSO.Files.RC
                     }
                 }
 
-                //a basin mask is made from the mesh each time it loads, and isn't saved
-                var savedMask = (MaskType == DGRP3DMaskType.Basin) ? DGRP3DMaskType.None : MaskType;
-                io.WriteInt32((int)savedMask);
-                if (savedMask != DGRP3DMaskType.None && DepthMask != null)
+                io.WriteInt32((int)MaskType);
+                if (DepthMask != null)
                 {
                     DepthMask.Save(io);
                 }
@@ -902,41 +900,98 @@ namespace FSO.Files.RC
         }
 
         /// <summary>
-        /// Objects set into a counter (sinks) reach below their base, and in 3D the counter top, drawn first, hides that
-        /// part: the basin was filled with countertop. TSO's sinks have depth masks made by hand for this; TS1's have
-        /// none. With no mask of its own, a mesh with parts below its base gets a lid over them: those triangles,
-        /// raised to just above the base. Drawn first, the lid clears the depth of whatever it covers (only when the
-        /// object is in a container, see DGRPRenderer), so the basin can be drawn into the counter. In mesh units, y is up
-        /// and 0 is the object's base (its slot, on a counter).
+        /// A sink sits in a counter's slot, and its basin reaches below its base, into the counter. In 3D the counter is
+        /// drawn first and its top covers the basin, so the sink looked filled with countertop. Meshes made by hand for TSO
+        /// have depth masks for this (DepthMask), but TS1's reconstructed meshes and the remesh pack's don't reliably.
+        /// This is a column over the basin: the outline of everything below the base (grown a little, so it's under the
+        /// rim), from y 0 to 1, stretched when drawn from the basin's bottom to just above the counter's top. Where what's
+        /// drawn so far lies inside it (the counter top, not a Sim in front of it), its depth is cleared, so the basin can
+        /// be drawn into the counter (see DGRPRenderer). Made each time the mesh loads, never saved, and only used when the
+        /// object is in another object.
         /// </summary>
-        private void BuildBasinMask(IEnumerable<DGRP3DGeometry> geoms, GraphicsDevice gd)
+        public DGRP3DGeometry BasinVolume;
+        /// <summary>The basin's bottom, in mesh units (y is up, 0 is the object's base).</summary>
+        public float BasinBottom;
+        /// <summary>The lowest point of the mesh, in mesh units, and how many points the basin's outline has (for notes).</summary>
+        public float LowestY;
+        public int BasinPoints;
+
+        private void BuildBasinVolume(IEnumerable<DGRP3DGeometry> geoms, GraphicsDevice gd)
         {
-            if (DepthMask != null || gd == null) return;
-            const float below = -0.02f; //how far below its base a vertex has to be to count
-            const float lid = 0.04f; //how far above its base the lid is
-            var verts = new List<DGRP3DVert>();
-            var indices = new List<int>();
+            if (gd == null) return;
+            const float below = -0.03f; //how far below its base a point has to be to be in the basin
+            const float deepest = -0.08f; //how deep the basin has to go, for it not to be a stray point
+            const float grow = 0.02f; //how far the outline is grown, to be under the rim
+            var points = new List<Vector2>();
+            var lowest = 0f;
             foreach (var geom in geoms)
             {
                 var sv = geom?.SVerts;
-                var si = geom?.SIndices;
-                if (sv == null || si == null) continue;
-                for (int i = 0; i + 2 < si.Count; i += 3)
+                if (sv == null) continue;
+                foreach (var v in sv)
                 {
-                    var a = sv[si[i]].Position; var b = sv[si[i + 1]].Position; var c = sv[si[i + 2]].Position;
-                    if (a.Y >= below && b.Y >= below && c.Y >= below) continue;
-                    foreach (var p in new[] { a, b, c })
-                    {
-                        indices.Add(verts.Count);
-                        verts.Add(new DGRP3DVert(new Vector3(p.X, Math.Max(p.Y, 0) + lid, p.Z), Vector3.Up, Vector2.Zero));
-                    }
+                    var p = v.Position;
+                    if (p.Y < lowest) lowest = p.Y;
+                    if (p.Y < below) points.Add(new Vector2(p.X, p.Z));
                 }
             }
-            if (indices.Count == 0) return;
-            var mask = new DGRP3DGeometry() { SVerts = verts, SIndices = indices };
-            mask.SComplete(gd);
-            DepthMask = mask;
-            MaskType = DGRP3DMaskType.Basin;
+            LowestY = lowest;
+            if (lowest > deepest) return;
+            var hull = ConvexHull(points);
+            BasinPoints = hull.Count;
+            if (hull.Count < 3) return;
+
+            var centre = Vector2.Zero;
+            foreach (var p in hull) centre += p;
+            centre /= hull.Count;
+            for (int i = 0; i < hull.Count; i++)
+            {
+                var dir = hull[i] - centre;
+                if (dir.LengthSquared() > 0) hull[i] += Vector2.Normalize(dir) * grow;
+            }
+
+            //a prism: the outline at y 0 and at y 1, closed at both ends. Its winding doesn't matter (see DGRPRenderer).
+            var n = hull.Count;
+            var verts = new List<DGRP3DVert>();
+            foreach (var p in hull) verts.Add(new DGRP3DVert(new Vector3(p.X, 0, p.Y), Vector3.Up, Vector2.Zero));
+            foreach (var p in hull) verts.Add(new DGRP3DVert(new Vector3(p.X, 1, p.Y), Vector3.Up, Vector2.Zero));
+            var indices = new List<int>();
+            for (int i = 1; i + 1 < n; i++)
+            {
+                indices.AddRange(new[] { 0, i, i + 1 });
+                indices.AddRange(new[] { n, n + i + 1, n + i });
+            }
+            for (int i = 0; i < n; i++)
+            {
+                var j = (i + 1) % n;
+                indices.AddRange(new[] { i, j, n + j });
+                indices.AddRange(new[] { i, n + j, n + i });
+            }
+            var volume = new DGRP3DGeometry() { SVerts = verts, SIndices = indices };
+            volume.SComplete(gd);
+            BasinVolume = volume;
+            BasinBottom = lowest - 0.02f;
+        }
+
+        /// <summary>The convex hull of some points, in order around it (monotone chain).</summary>
+        private static List<Vector2> ConvexHull(List<Vector2> points)
+        {
+            var pts = points.Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).ToList();
+            if (pts.Count < 3) return pts;
+            float cross(Vector2 o, Vector2 a, Vector2 b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+            var hull = new Vector2[pts.Count * 2];
+            int k = 0;
+            for (int i = 0; i < pts.Count; i++)
+            {
+                while (k >= 2 && cross(hull[k - 2], hull[k - 1], pts[i]) <= 0) k--;
+                hull[k++] = pts[i];
+            }
+            for (int i = pts.Count - 2, t = k + 1; i >= 0; i--)
+            {
+                while (k >= t && cross(hull[k - 2], hull[k - 1], pts[i]) <= 0) k--;
+                hull[k++] = pts[i];
+            }
+            return hull.Take(k - 1).ToList();
         }
 
         public void IncrementDataRef()
@@ -974,8 +1029,6 @@ namespace FSO.Files.RC
     {
         None = 0,
         Normal = 1,
-        Portal = 2,
-        /// <summary>Made from the mesh: a lid over the parts below its base (a sink's basin, set into a counter).</summary>
-        Basin = 3
+        Portal = 2
     }
 }
