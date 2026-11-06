@@ -27,8 +27,11 @@ namespace FSO.LotView.Model
         public short[] Raise;
         /// <summary>Per tile: 0 for no steps, else 1 + the direction (see <see cref="Directions"/>) the steps rise toward.</summary>
         public byte[] Steps;
-        /// <summary>Per tile: the wall covering (a wall pattern ID) on the foundation's sides, 0 for plain concrete (caps, tops and steps are always concrete).</summary>
-        public ushort[] Pattern;
+        /// <summary>
+        /// Per side of each tile, four a tile (<see cref="SideIndex"/>): the wall covering (a wall pattern ID) painted on
+        /// that side of the foundation, 0 for plain concrete. Caps, tops and steps are always concrete.
+        /// </summary>
+        public ushort[] Sides;
 
         /// <summary>True if any tile has a foundation or steps (kept up to date by <see cref="Refresh"/>).</summary>
         public bool Any { get; private set; }
@@ -39,7 +42,7 @@ namespace FSO.LotView.Model
             Height = height;
             Raise = new short[width * height];
             Steps = new byte[width * height];
-            Pattern = new ushort[width * height];
+            Sides = new ushort[width * height * 4];
         }
 
         public FoundationMap Clone()
@@ -57,11 +60,11 @@ namespace FSO.LotView.Model
                 Height = other.Height;
                 Raise = new short[Width * Height];
                 Steps = new byte[Width * Height];
-                Pattern = new ushort[Width * Height];
+                Sides = new ushort[Width * Height * 4];
             }
             Array.Copy(other.Raise, Raise, Raise.Length);
             Array.Copy(other.Steps, Steps, Steps.Length);
-            Array.Copy(other.Pattern, Pattern, Pattern.Length);
+            Array.Copy(other.Sides, Sides, Sides.Length);
             Any = other.Any;
         }
 
@@ -74,6 +77,18 @@ namespace FSO.LotView.Model
         }
 
         public bool InBounds(int x, int y) => x >= 0 && y >= 0 && x < Width && y < Height;
+
+        /// <summary>Where a tile's side (a direction, see <see cref="Directions"/>) is in <see cref="Sides"/>.</summary>
+        public int SideIndex(int x, int y, int dir) => (y * Width + x) * 4 + dir;
+
+        /// <summary>The covering on a tile's side (0 for plain, or off the lot).</summary>
+        public ushort SideOf(int x, int y, int dir) => InBounds(x, y) ? Sides[SideIndex(x, y, dir)] : (ushort)0;
+
+        /// <summary>Puts one covering on all four sides of a tile.</summary>
+        public void SetAllSides(int index, ushort pattern)
+        {
+            for (int dir = 0; dir < 4; dir++) Sides[index * 4 + dir] = pattern;
+        }
 
         /// <summary>The tile's foundation raise (0 off the lot, on the ground, or on steps).</summary>
         public short RaiseOf(int x, int y) => InBounds(x, y) ? Raise[y * Width + x] : (short)0;
@@ -174,6 +189,17 @@ namespace FSO.LotView.Model
             var other = RaiseOf(nx, ny);
             if (other >= raise) return 0;
             return (short)(raise - other);
+        }
+
+        /// <summary>
+        /// Whether a foundation tile's side shows (and can be painted, and has a cap on top): it drops to lower ground or
+        /// a lower foundation, and no steps lead up to it.
+        /// </summary>
+        public bool SideShows(int x, int y, int dir)
+        {
+            if (SideDrop(x, y, dir) <= 0) return false;
+            var d = Directions[dir];
+            return StepDirection(x + d.X, y + d.Y) != (dir + 2) % 4;
         }
     }
 }
