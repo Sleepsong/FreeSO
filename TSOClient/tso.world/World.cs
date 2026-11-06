@@ -408,7 +408,9 @@ namespace FSO.LotView
             }
             else
             {
-                targHeight = Math.Max((Blueprint.InterpAltitude(new Vector3(State.Camera.Position.X, State.Camera.Position.Z, 0) / 3) + (State.Level - 1) * 2.95f) * 3, terrainHeight);
+                targHeight = (Blueprint.InterpAltitude(new Vector3(State.Camera.Position.X, State.Camera.Position.Z, 0) / 3) + (State.Level - 1) * 2.95f) * 3;
+                //not below the ground, except to look at the basement (level 0)
+                if (State.Level > 0) targHeight = Math.Max(targHeight, terrainHeight);
             }
 
             return new Tuple<float, float>(terrainHeight, targHeight);
@@ -1029,7 +1031,7 @@ namespace FSO.LotView
             var doors = new List<Tuple<ObjectComponent, bool>>();
             try
             {
-                var level = (sbyte)Math.Max(1, Math.Min(bp.Stories, (int)pic.Level));
+                var level = (sbyte)Math.Max(0, Math.Min(bp.Stories, (int)pic.Level)); //(0: the basement)
                 State.SilentLevel = level;
                 var cut = (pic.Cut != null && pic.Cut.Length == oldCut.Length) ? pic.Cut : new bool[oldCut.Length];
                 bp.Cutaway = cut;

@@ -1362,6 +1362,9 @@ namespace FSO.SimAntics
                 if (Thread != null) ExecuteEntryPoint(6, Thread.Context, true, this);
             }
 
+            //(the world raises wall-mounted things with their wall, on a foundation's edge)
+            if (UseWorld && WorldUI is ObjectComponent wallObj) wallObj.WallAttachment = set ? (WallSegments)rotPart : 0;
+
             if (rotPart == 0) return;
 
             if (exclusive)

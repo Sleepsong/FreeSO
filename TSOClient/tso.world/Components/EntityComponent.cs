@@ -79,6 +79,18 @@ namespace FSO.LotView.Components
         public EntityComponent Container;
         public int ContainerSlot;
 
+        /// <summary>The position last set, before the ground's height was added.</summary>
+        protected Vector3 _UnraisedPosition;
+
+        /// <summary>The walls (of its tile) this is fixed to, if any: it stands as high as they do (see <see cref="Blueprint.WallObjectAltitude"/>).</summary>
+        public virtual WallSegments AttachedWalls => 0;
+
+        /// <summary>Works out this one's height again, after the ground or a foundation under it changed.</summary>
+        public virtual void RefreshAltitude()
+        {
+            if (Container == null) Position = _UnraisedPosition;
+        }
+
         protected bool _Visible = true;
         public bool Visible { get { return _Visible; } set { _Visible = value; } }
 
@@ -117,7 +129,8 @@ namespace FSO.LotView.Components
             set
             {
                 _Position = value;
-                if (blueprint != null) _Position.Z += blueprint.InterpAltitude(new Vector3(0.5f, 0.5f, 0) + _Position - MTOffset / 16) + MTOffset.Z / 16f;
+                _UnraisedPosition = value;
+                if (blueprint != null) _Position.Z += blueprint.WallObjectAltitude(new Vector3(0.5f, 0.5f, 0) + _Position - MTOffset / 16, AttachedWalls) + MTOffset.Z / 16f;
                 OnPositionChanged();
                 _WorldDirty = true;
 

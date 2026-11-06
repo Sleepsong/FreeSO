@@ -937,7 +937,7 @@ namespace FSO.SimAntics
         public void RegisterObjectPos(VMEntity obj, bool roomChange)
         {
             var pos = obj.Position;
-            if (pos.Level < 1) return;
+            if (pos.Level < 0) return;
 
             //add object to room
             var room = GetObjectRoom(obj);
@@ -1087,8 +1087,9 @@ namespace FSO.SimAntics
 
         public VMSolidResult SolidToAvatars(LotTilePos pos)
         {
-            if (IsOutOfBounds(pos) || (pos.Level < 1) || 
-                (pos.Level != 1 && Architecture.GetFloor(pos.TileX, pos.TileY, pos.Level).Pattern == 0)) return new VMSolidResult { Solid = true };
+            if (IsOutOfBounds(pos) || (pos.Level < 0) || 
+                ((pos.Level != 1 || Architecture.Basement?.IsDug(pos.TileX, pos.TileY) == true) //(over the basement, no floor is air)
+                && Architecture.GetFloor(pos.TileX, pos.TileY, pos.Level).Pattern == 0)) return new VMSolidResult { Solid = true };
             var objs = ObjectQueries.GetObjectsAt(pos);
             if (objs == null) return new VMSolidResult();
             foreach (var obj in objs)
@@ -1106,7 +1107,8 @@ namespace FSO.SimAntics
 
         public bool IsOutOfBounds(LotTilePos pos)
         {
-            return (pos.x < 0 || pos.y < 0 || pos.Level < 1 || pos.TileX >= _Arch.Width || pos.TileY >= _Arch.Height || pos.Level > _Arch.Stories);
+            return (pos.x < 0 || pos.y < 0 || pos.Level < 0 || pos.TileX >= _Arch.Width || pos.TileY >= _Arch.Height || pos.Level > _Arch.Stories
+                || (pos.Level == 0 && _Arch.Basement?.IsDug(pos.TileX, pos.TileY) != true)); //the basement: only its dug out tiles
         }
 
 
@@ -1122,7 +1124,8 @@ namespace FSO.SimAntics
             {
                 if (pos.TileX < 0 || pos.TileX >= _Arch.Width) return false;
                 else if (pos.TileY < 0 || pos.TileY >= _Arch.Height) return false;
-                else if (pos.Level < 1 || pos.Level > _Arch.BuildableFloors) return false;
+                else if (pos.Level < 0 || pos.Level > _Arch.BuildableFloors) return false;
+                else if (pos.Level == 0 && _Arch.Basement?.IsDug(pos.TileX, pos.TileY) != true) return true; //earth
                 else
                 {
                     return !fine [pos.TileX + pos.TileY * _Arch.Width];
@@ -1131,7 +1134,8 @@ namespace FSO.SimAntics
             else
             {
                 var area = Architecture.BuildableArea;
-                return (pos.TileX < area.X || pos.TileY < area.Y || pos.Level < 1 || pos.TileX >= area.Right || pos.TileY >= area.Bottom || pos.Level > _Arch.BuildableFloors);
+                return (pos.TileX < area.X || pos.TileY < area.Y || pos.Level < 0 || pos.TileX >= area.Right || pos.TileY >= area.Bottom || pos.Level > _Arch.BuildableFloors
+                    || (pos.Level == 0 && _Arch.Basement?.IsDug(pos.TileX, pos.TileY) != true)); //earth
             }
         }
 

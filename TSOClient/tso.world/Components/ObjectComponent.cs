@@ -43,6 +43,23 @@ namespace FSO.LotView.Components
         public bool HideForCutawayInWall;
         public WallSegments AdjacentWall;
 
+        private WallSegments _WallAttachment;
+        /// <summary>
+        /// The walls of its tile this object needs (paintings, windows, doors...): it stands as high as they do, so on
+        /// a foundation's edge it goes up with the wall even from the tile outside.
+        /// </summary>
+        public WallSegments WallAttachment
+        {
+            get => _WallAttachment;
+            set
+            {
+                if (_WallAttachment == value) return;
+                _WallAttachment = value;
+                if (blueprint?.Foundations?.Any == true) RefreshAltitude();
+            }
+        }
+        public override WallSegments AttachedWalls => _WallAttachment;
+
         //for ultra lighting in 2d. objects can have a shadow component which handles drawing in 3d.
         private ObjectComponent ShadowComponent;
         public static Func<GameObject, ObjectComponent> MakeShadowComponent;

@@ -157,6 +157,24 @@ namespace FSO.SimAntics.Entities
             }
         }
 
+        /// <summary>Whether every tile this group would cover at <paramref name="pos"/> has the same foundation (or none).</summary>
+        private bool StraddlesNothing(LotTilePos pos, Matrix rotMat, Vector3 leadOff, VMContext context)
+        {
+            var map = context.Architecture?.Terrain?.Foundations;
+            if (map == null || !map.Any) return true;
+            int level = int.MinValue;
+            for (int i = 0; i < Objects.Count; i++)
+            {
+                var off = Vector3.Transform(new Vector3(Offsets[i].x, Offsets[i].y, 0) - leadOff, rotMat);
+                var tx = (int)Math.Round(pos.x + off.X) >> 4;
+                var ty = (int)Math.Round(pos.y + off.Y) >> 4;
+                var here = (map.StepDirection(tx, ty) >= 0) ? -1 : map.RaiseOf(tx, ty);
+                if (level == int.MinValue) level = here;
+                else if (here != level) return false;
+            }
+            return true;
+        }
+
         public VMPlacementResult ChangePosition(LotTilePos pos, Direction direction, VMContext context, VMPlaceRequestFlags flags)
         {
             if (pos.Level > context.Architecture.Stories) return new VMPlacementResult(VMPlacementError.NotAllowedOnFloor);
@@ -182,6 +200,10 @@ namespace FSO.SimAntics.Entities
             var bOff = Offsets[Objects.IndexOf(BaseObject)];
             var leadOff = new Vector3(bOff.x, bOff.y, 0);
             var offTotal = new Vector3();
+
+            //a multitile object can't straddle a foundation's edge (or its steps): all of it stands at one height
+            if (pos != LotTilePos.OUT_OF_WORLD && count > 1 && !StraddlesNothing(pos, rotMat, leadOff, context))
+                return new VMPlacementResult(VMPlacementError.CantPlaceOnSlope);
             
             if (pos != LotTilePos.OUT_OF_WORLD)
             {

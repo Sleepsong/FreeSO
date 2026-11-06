@@ -49,7 +49,8 @@ namespace FSO.SimAntics.Model
         private int GetOffest(LotTilePos pos)
         {
             if (pos == LotTilePos.OUT_OF_WORLD) return -1;
-            return pos.TileX + pos.TileY * Context.Architecture.Width + (pos.Level - 1) * Context.Architecture.Width * Context.Architecture.Height;
+            //by level from the basement (level 0) up, so every tile's key is 0 or more (-1 is out of the world)
+            return pos.TileX + pos.TileY * Context.Architecture.Width + pos.Level * Context.Architecture.Width * Context.Architecture.Height;
         }
 
         public void RegisterObjectPos(VMEntity ent)

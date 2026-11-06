@@ -28,12 +28,13 @@ namespace FSO.SimAntics
 
         //public for quick access and iteration. 
         //Make sure that on modifications you signal so that the render updates.
-        public WallTile[][] Walls;
-        public WallTile[][] VisWalls;
-        public List<int>[] WallsAt;
+        //per level, by level - 1; [-1] is the basement, level 0 (see LevelArray)
+        public LevelArray<WallTile[]> Walls;
+        public LevelArray<WallTile[]> VisWalls;
+        public LevelArray<List<int>> WallsAt;
 
-        public FloorTile[][] Floors;
-        public FloorTile[][] VisFloors;
+        public LevelArray<FloorTile[]> Floors;
+        public LevelArray<FloorTile[]> VisFloors;
 
         public VMArchitectureTerrain Terrain;
         public uint RoofStyle = 16;
@@ -41,12 +42,12 @@ namespace FSO.SimAntics
 
         public bool BuildBuyEnabled = true;
 
-        public bool[][] ObjectSupport;
+        public LevelArray<bool[]> ObjectSupport;
         public bool[][] Supported;
 
         public List<VMArchitectureCommand> Commands;
 
-        public VMRoomMap[] Rooms;
+        public LevelArray<VMRoomMap> Rooms;
         public List<VMRoom> RoomData;
         public event ArchitectureEvent WallsChanged;
         public Rectangle TerrainLimit; //in tso mode, this is set to the maximum buildable area.
@@ -62,6 +63,12 @@ namespace FSO.SimAntics
         private bool WallsDirty;
         private bool FloorsDirty;
         private bool TerrainDirty;
+        private bool FoundationsDirty; //a real foundation change: things on the lot need their heights again
+        private bool VisFoundationsChanged; //a build tool's preview changes foundations
+        private bool ShowingVisFoundations;
+        private bool BasementDirty; //a real basement change: the world draws the ground with holes over it, and its sides
+        private bool VisBasementChanged; //a build tool's preview changes the basement
+        private bool ShowingVisBasement;
 
         private bool Redraw;
 
@@ -111,21 +118,21 @@ namespace FSO.SimAntics
             this.Height = height;
 
             var numTiles = width * height;
-            this.WallsAt = new List<int>[Stories];
-            this.Walls = new WallTile[Stories][];
-            this.VisWalls = new WallTile[Stories][];
+            this.WallsAt = new LevelArray<List<int>>(Stories);
+            this.Walls = new LevelArray<WallTile[]>(Stories);
+            this.VisWalls = new LevelArray<WallTile[]>(Stories);
 
-            this.Floors = new FloorTile[Stories][];
-            this.VisFloors = new FloorTile[Stories][];
+            this.Floors = new LevelArray<FloorTile[]>(Stories);
+            this.VisFloors = new LevelArray<FloorTile[]>(Stories);
 
-            this.ObjectSupport = new bool[Stories][]; //true if there's an object support in the specified position
+            this.ObjectSupport = new LevelArray<bool[]>(Stories); //true if there's an object support in the specified position
             this.Supported = new bool[Stories-1][]; //no supported array for bottom floor. true if this tile is supported.
             if (blueprint != null) blueprint.Supported = Supported;
 
-            this.Rooms = new VMRoomMap[Stories];
+            this.Rooms = new LevelArray<VMRoomMap>(Stories);
             this.Terrain = new VMArchitectureTerrain(width, height);
 
-            for (int i = 0; i < Stories; i++)
+            for (int i = LevelArray<int>.MinIndex; i < Stories; i++) //the basement (-1) and up
             {
                 this.WallsAt[i] = new List<int>();
                 this.Walls[i] = new WallTile[numTiles];
@@ -135,7 +142,7 @@ namespace FSO.SimAntics
                 this.VisFloors[i] = new FloorTile[numTiles];
                 this.ObjectSupport[i] = new bool[numTiles];
 
-                if (i<Stories-1) this.Supported[i] = new bool[numTiles];
+                if (i >= 0 && i<Stories-1) this.Supported[i] = new bool[numTiles];
 
                 this.Rooms[i] = new VMRoomMap();
             }
@@ -314,7 +321,7 @@ namespace FSO.SimAntics
                 WallLines = new List<Vector2[]>(),
                 WallObs = new List<Model.Routing.VMObstacle>()
             }); //dummy at index 1
-            for (int i = 0; i < Stories; i++)
+            for (int i = LevelArray<int>.MinIndex; i < Stories; i++) //the basement (-1) and up
             {
                 Rooms[i].Map = allOutside;
                 if (VM.UseWorld)
@@ -328,9 +335,12 @@ namespace FSO.SimAntics
         {
             RoomData = new List<VMRoom>();
             RoomData.Add(new VMRoom()); //dummy at index 0
-            for (int i=0; i<Stories; i++)
+            //the ground floor and up, then the basement (level 0, index -1): last, so the other levels' rooms keep their
+            //numbers, and so on it (as on upper floors) a tile with no floor is air: the basement's earth
+            for (int i=0; i<=Stories; i++)
             {
-                Rooms[i].GenerateMap(Walls[i], Floors[i], Width, Height, RoomData, (sbyte)i, Context);
+                if (i == Stories) i = -1;
+                Rooms[i].GenerateMap(Walls[i], Floors[i], Width, Height, RoomData, (sbyte)i, Context, basement: i == -1);
                 if (VM.UseWorld)
                 {
                     //map translate to light map
@@ -355,6 +365,7 @@ namespace FSO.SimAntics
                     //WorldUI.RoomMap[i] = Rooms[i].Map;
                 }
                 RegenerateSupported(i + 1);
+                if (i == -1) break;
             }
 
             if (VM.UseWorld)
@@ -401,15 +412,42 @@ namespace FSO.SimAntics
                     WorldUI.Altitude = Terrain.Heights;
 
                     WorldUI.AltitudeCenters = Terrain.Centers;
+                    WorldUI.Foundations = Terrain.Foundations;
                     WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState);
 
                 }
                 TerrainDirty = false;
             }
 
+            if (BasementDirty)
+            {
+                BasementDirty = false;
+                Terrain.Basement.Refresh();
+                if (VM.UseWorld)
+                {
+                    WorldUI.Basement = Terrain.Basement;
+                    WorldUI.Terrain.TerrainDirty = true;
+                }
+            }
+
+            if (FoundationsDirty)
+            {
+                FoundationsDirty = false;
+                Terrain.Foundations.Refresh();
+                if (VM.UseWorld)
+                {
+                    WorldUI.Foundations = Terrain.Foundations;
+                    WorldUI.Terrain.TerrainDirty = true;
+                    //everything standing on the changed tiles goes up or down with them
+                    foreach (var ent in Context.VM.Entities) ent.WorldUI?.RefreshAltitude();
+                }
+            }
+
             if (VM.UseWorld && Redraw)
             {
                 LastFailReason = 0;
+                VisFoundationsChanged = false;
+                VisBasementChanged = false;
                 LastTestCost = SimulateCommands(Commands, true);
                 WorldUI.SignalWallChange();
                 WorldUI.SignalFloorChange();
@@ -417,6 +455,20 @@ namespace FSO.SimAntics
                 {
                     WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.VisHeights, Terrain.VisGrass);
                     TerrainDirty = false;
+                }
+                //a build tool previewing foundations shows its copy; otherwise the real ones
+                if (VisFoundationsChanged || ShowingVisFoundations)
+                {
+                    WorldUI.Foundations = VisFoundationsChanged ? Terrain.VisFoundations : Terrain.Foundations;
+                    WorldUI.Terrain.TerrainDirty = true;
+                    ShowingVisFoundations = VisFoundationsChanged;
+                }
+                //and the basement the same way
+                if (VisBasementChanged || ShowingVisBasement)
+                {
+                    WorldUI.Basement = VisBasementChanged ? Terrain.VisBasement : Terrain.Basement;
+                    WorldUI.Terrain.TerrainDirty = true;
+                    ShowingVisBasement = VisBasementChanged;
                 }
             }
 
@@ -449,8 +501,8 @@ namespace FSO.SimAntics
                 var oldFloors = Floors;
                 Terrain.EnterVis();
 
-                WallsAt = new List<int>[Stories];
-                for (int i = 0; i < Stories; i++)
+                WallsAt = new LevelArray<List<int>>(Stories);
+                for (int i = LevelArray<int>.MinIndex; i < Stories; i++) //the basement (-1) and up
                 {
                     Array.Copy(Floors[i], VisFloors[i], Floors[i].Length);
                     Array.Copy(Walls[i], VisWalls[i], Walls[i].Length);
@@ -633,6 +685,25 @@ namespace FSO.SimAntics
                         var dotCount = VMArchitectureTools.DotTerrain(this, new Point(com.x, com.y), (short)com.pattern);
                         cost += dotCount;
                         break;
+
+                    case VMArchitectureCommandType.FOUNDATION_RECT:
+                        //style: height (0 removes), pattern: the wall covering on the sides
+                        var fCount = VMFoundationTools.PlaceFoundation(this, new Rectangle(com.x, com.y, com.x2, com.y2), (short)com.style, com.pattern);
+                        if (fCount > 0) cost += fCount * FoundationTilePrice;
+                        else if (fCount < 0) cost += fCount * FoundationTileSellback;
+                        break;
+                    case VMArchitectureCommandType.BASEMENT_RECT:
+                        //style: bit 0 digs (1) or fills in (0), the rest is the wall covering on the earth's sides; pattern: floor
+                        var bCount = VMBasementTools.Dig(this, new Rectangle(com.x, com.y, com.x2, com.y2), (com.style & 1) != 0, com.pattern, (ushort)(com.style >> 1));
+                        if (bCount > 0) cost += bCount * BasementTilePrice;
+                        else if (bCount < 0) cost += bCount * BasementTileSellback;
+                        break;
+                    case VMArchitectureCommandType.FOUNDATION_STEPS:
+                        //pattern: direction the steps rise toward (255 picks the foundation next to the tile), style: 1 places, 0 removes
+                        var sCount = VMFoundationTools.PlaceFoundationSteps(this, new Point(com.x, com.y), com.pattern, com.style != 0);
+                        if (sCount > 0) cost += sCount * FoundationStepsPrice;
+                        else if (sCount < 0) cost += sCount * FoundationStepsSellback;
+                        break;
                 }
             }
             if (lastAvatar != null && pdCount > 0)
@@ -799,7 +870,55 @@ namespace FSO.SimAntics
         public bool GetTerrainSloped(short tileX, short tileY)
         {
             var off = GetOffset(tileX, tileY);
-            return Terrain.Sloped[off];
+            //foundation steps count as a slope: no walls, and only objects that allow slopes
+            return Terrain.Sloped[off] || (Terrain.Foundations != null && Terrain.Foundations.Steps[off] != 0);
+        }
+
+        public const int BasementTilePrice = 50; //digging out a tile of basement, with its floor (and the floor above)
+        public const int BasementTileSellback = 35;
+
+        /// <summary>
+        /// Call after changing <see cref="VMArchitectureTerrain.Basement"/>: rooms and routing on level 0 (only its dug
+        /// out tiles are open), and the world's ground (with holes over the basement) and the earth's sides follow.
+        /// </summary>
+        public void SignalBasementChange()
+        {
+            Terrain.Basement.Refresh();
+            if (RealMode)
+            {
+                BasementDirty = true;
+                FloorsDirty = true;
+                WallsDirty = true;
+            }
+            else VisBasementChanged = true;
+            Redraw = true;
+        }
+
+        public const int FoundationTilePrice = 10;
+        public const int FoundationTileSellback = 7;
+        public const int FoundationStepsPrice = 40;
+        public const int FoundationStepsSellback = 28;
+
+        /// <summary>
+        /// Call after changing <see cref="VMArchitectureTerrain.Foundations"/>: rooms and routing (the foundations'
+        /// edges block Sims), the ground's mesh, floors, walls and everything standing on the lot follow.
+        /// </summary>
+        public void SignalFoundationChange()
+        {
+            Terrain.Foundations.Refresh();
+            if (RealMode)
+            {
+                FoundationsDirty = true;
+                FloorsDirty = true;
+            }
+            else VisFoundationsChanged = true;
+            Redraw = true;
+        }
+
+        /// <summary>A tile's foundation raise (0 for none, or steps).</summary>
+        public short GetFoundation(short tileX, short tileY)
+        {
+            return Terrain.Foundations?.RaiseOf(tileX, tileY) ?? 0;
         }
 
         public void SetTerrainHeight(short tileX, short tileY, short height)
@@ -892,12 +1011,15 @@ namespace FSO.SimAntics
 
         public bool OutsideClip(short tileX, short tileY, sbyte level)
         {
+            //the basement (level 0) is earth except where it's dug out: build there, and on the earth's edges round it
+            if (level < 0) return true;
+            if (level == 0 && !BasementNear(tileX, tileY)) return true;
             var fine = FineBuildableArea;
             if (fine != null)
             {
                 if (tileX < 0 || tileX >= Width) return true;
                 else if (tileY < 0 || tileY >= Height) return true;
-                else if (level < 1) return true;
+                else if (level < 0) return true;
                 else
                 {
                     return !fine[tileX + tileY * Width];
@@ -906,9 +1028,20 @@ namespace FSO.SimAntics
 
             var area = BuildableArea;
             if (DisableClip)
-                return (tileX < 0 || tileY < 0 || level < 1 || tileX >= Width || tileY >= Height || level > Stories);
+                return (tileX < 0 || tileY < 0 || level < 0 || tileX >= Width || tileY >= Height || level > Stories);
             else
-                return (tileX < area.X || tileY < area.Y || level < 1 || tileX >= area.Right || tileY >= area.Bottom || level > BuildableFloors);
+                return (tileX < area.X || tileY < area.Y || level < 0 || tileX >= area.Right || tileY >= area.Bottom || level > BuildableFloors);
+        }
+
+        /// <summary>The basement's dug out tiles (see <see cref="BasementMap"/>): level 0 is earth elsewhere.</summary>
+        public BasementMap Basement => Terrain.Basement;
+
+        /// <summary>Whether a tile is dug out, or beside one that is (its edge against the earth can have walls).</summary>
+        public bool BasementNear(int x, int y)
+        {
+            var map = Terrain.Basement;
+            if (map == null) return false;
+            return map.IsDug(x, y) || map.IsDug(x - 1, y) || map.IsDug(x + 1, y) || map.IsDug(x, y - 1) || map.IsDug(x, y + 1);
         }
 
         public bool SetFloor(short tileX, short tileY, sbyte level, FloorTile floor, bool force)
@@ -916,10 +1049,20 @@ namespace FSO.SimAntics
             //returns false on failure
             var offset = GetOffset(tileX, tileY);
 
+            //the basement: floors only on dug out tiles (level 0 is earth elsewhere), and no pools down there
+            var dug = Terrain.Basement?.IsDug(tileX, tileY) == true;
+            if (level == 0 && (!dug || floor.Pattern > 65533)) return false;
             if (!force)
             {
+                //a dug out tile always has a floor; the tile above it (the basement's ceiling) can be taken up for a
+                //stairwell (it's air then, as on upper floors), but can't be a pool
+                if (dug && level == 0 && floor.Pattern == 0) return false;
+                if (dug && level == 1 && floor.Pattern > 65533) return false;
                 //first check if we're supported
                 if (floor.Pattern > 65533 && level > 1 && RoomData[(int)Rooms[level - 2].Map[offset]&0xFFFF].IsOutside) return false;
+                //no pools in a foundation, or on its steps
+                if (floor.Pattern > 65533 && level == 1 && Terrain.Foundations != null
+                    && (Terrain.Foundations.Raise[offset] != 0 || Terrain.Foundations.Steps[offset] != 0)) return false;
                 if (floor.Pattern > 0 && level > 1 && !Supported[level - 2][offset]) return false;
                 //check if objects need/don't need floors
                 if (!Context.CheckFloorValid(LotTilePos.FromBigTile((short)tileX, (short)tileY, level), floor)) return false;
@@ -948,8 +1091,12 @@ namespace FSO.SimAntics
                 Stories = Stories,
                 Terrain = Terrain,
         
-                Walls = Walls,
-                Floors = Floors,
+                Walls = Walls.ToArray(),
+                Floors = Floors.ToArray(),
+                //the basement (level 0): saved at the end of the save (see VMMarshal), copied so saving can go on alongside
+                Basement = (Terrain.Basement?.Any == true) ? Terrain.Basement.Clone() : null,
+                BasementWalls = (WallTile[])Walls.Basement.Clone(),
+                BasementFloors = (FloorTile[])Floors.Basement.Clone(),
                 FineBuildableArea = FineBuildableArea,
 
                 WallsDirty = WallsDirty,
@@ -959,7 +1106,8 @@ namespace FSO.SimAntics
                 RoofStyle = RoofStyle,
                 IDMap = Context.VM.TS1 ? new VMResourceIDMarshal(Context.VM) : null,
 
-                BuildBuyEnabled = BuildBuyEnabled
+                BuildBuyEnabled = BuildBuyEnabled,
+                Foundations = (Terrain.Foundations?.Any == true) ? Terrain.Foundations.Clone() : null
             };
             marshal.Preserialize(); //this must be done to keep async serialization thread safe.
             //in other places we just clone mutable state, but here there are so many deep
@@ -973,9 +1121,15 @@ namespace FSO.SimAntics
             Height = input.Height;
             Stories = input.Stories;
             Terrain = input.Terrain;
+            FoundationsDirty = true;
+            BasementDirty = true;
 
-            Walls = input.Walls;
-            Floors = input.Floors;
+            //the basement (level 0) comes from the end of the save; empty for a save from before basements
+            var size = Width * Height;
+            Walls = LevelArray<WallTile[]>.From(input.Walls,
+                (input.BasementWalls?.Length == size) ? input.BasementWalls : new WallTile[size]);
+            Floors = LevelArray<FloorTile[]>.From(input.Floors,
+                (input.BasementFloors?.Length == size) ? input.BasementFloors : new FloorTile[size]);
             FineBuildableArea = input.FineBuildableArea;
             if (VM.UseWorld) WorldUI.FineArea = FineBuildableArea;
 
@@ -1004,8 +1158,8 @@ namespace FSO.SimAntics
 
         public void RegenWallsAt()
         {
-            WallsAt = new List<int>[Stories];
-            for (int i=0; i<Stories; i++)
+            WallsAt = new LevelArray<List<int>>(Stories);
+            for (int i = LevelArray<int>.MinIndex; i<Stories; i++) //the basement (-1) and up
             {
                 var list = new List<int>();
 

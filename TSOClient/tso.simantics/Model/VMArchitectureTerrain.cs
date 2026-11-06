@@ -1,4 +1,5 @@
 ﻿using FSO.Content.Model;
+using FSO.LotView.Model;
 using FSO.SimAntics.NetPlay.Model;
 using FSO.SimAntics.Utils;
 using System;
@@ -21,6 +22,18 @@ namespace FSO.SimAntics.Model
         private short[] OldHeights;
         private byte[] OldGrass;
 
+        /// <summary>Foundations and their steps (see <see cref="FoundationMap"/>), shared with the world for drawing.</summary>
+        public FoundationMap Foundations;
+        /// <summary>The copy previews (build tools dragging) change, while <see cref="EnterVis"/> is in effect.</summary>
+        public FoundationMap VisFoundations;
+        private FoundationMap OldFoundations;
+
+        /// <summary>The basement's dug out tiles (see <see cref="BasementMap"/>), shared with the world for drawing.</summary>
+        public BasementMap Basement;
+        /// <summary>The copy previews (build tools dragging) change, while <see cref="EnterVis"/> is in effect.</summary>
+        public BasementMap VisBasement;
+        private BasementMap OldBasement;
+
         public TerrainType LightType = TerrainType.GRASS;
         public TerrainType DarkType = TerrainType.GRASS;
         public int Version;
@@ -40,6 +53,12 @@ namespace FSO.SimAntics.Model
 
             VisHeights = new short[width * height];
             VisGrass = new byte[width * height];
+
+            Foundations = new FoundationMap(width, height);
+            VisFoundations = new FoundationMap(width, height);
+
+            Basement = new BasementMap(width, height);
+            VisBasement = new BasementMap(width, height);
         }
 
         public void EnterVis()
@@ -52,12 +71,24 @@ namespace FSO.SimAntics.Model
 
             Heights = VisHeights;
             GrassState = VisGrass;
+
+            OldFoundations = Foundations;
+            VisFoundations.CopyFrom(Foundations);
+            Foundations = VisFoundations;
+
+            OldBasement = Basement;
+            VisBasement.CopyFrom(Basement);
+            Basement = VisBasement;
         }
 
         public void ExitVis()
         {
             Heights = OldHeights;
             GrassState = OldGrass;
+            if (OldFoundations != null) Foundations = OldFoundations;
+            OldFoundations = null;
+            if (OldBasement != null) Basement = OldBasement;
+            OldBasement = null;
         }
 
         public void RegenerateCenters() //TODO: partial update
@@ -250,6 +281,43 @@ namespace FSO.SimAntics.Model
             writer.Write(GrassState);
         }
 
+        /// <summary>
+        /// Foundations, saved at the very end of a save (version 39 on; see VMMarshal) rather than with the terrain, so
+        /// builds without foundations still read the rest of the lot (they stop before this).
+        /// </summary>
+        public static void WriteFoundations(BinaryWriter writer, FoundationMap map)
+        {
+            var has = map != null && map.Any;
+            writer.Write(has);
+            if (!has) return;
+            writer.Write(map.Width);
+            writer.Write(map.Height);
+            VMSerializableUtils.WriteArray(writer, map.Raise);
+            writer.Write(map.Steps);
+            VMSerializableUtils.WriteArray(writer, map.Pattern);
+        }
+
+        /// <summary>Reads what <see cref="WriteFoundations"/> wrote: null if the lot has none.</summary>
+        public static FoundationMap ReadFoundations(BinaryReader reader)
+        {
+            if (!reader.ReadBoolean()) return null;
+            int width = reader.ReadInt32(), height = reader.ReadInt32();
+            var map = new FoundationMap(width, height);
+            map.Raise = VMSerializableUtils.ReadArray<short>(reader, width * height);
+            map.Steps = reader.ReadBytes(width * height);
+            map.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
+            map.Refresh();
+            return map;
+        }
+
+        /// <summary>Takes on saved foundations (if they fit this lot).</summary>
+        public void SetFoundations(FoundationMap map)
+        {
+            if (map == null || map.Width != Width || map.Height != Height) return;
+            Foundations.CopyFrom(map);
+            Foundations.Refresh();
+        }
+
         public void Deserialize(BinaryReader reader)
         {
             LightType = (TerrainType)reader.ReadByte();
@@ -266,6 +334,20 @@ namespace FSO.SimAntics.Model
             }
             
             GrassState = reader.ReadBytes(reader.ReadInt32());
+
+            Foundations = new FoundationMap(Width, Height);
+            VisFoundations = new FoundationMap(Width, Height);
+
+            Basement = new BasementMap(Width, Height);
+            VisBasement = new BasementMap(Width, Height);
+        }
+
+        /// <summary>Takes on a saved basement's dug out tiles (if they fit this lot).</summary>
+        public void SetBasement(BasementMap map)
+        {
+            if (map == null || map.Width != Width || map.Height != Height) return;
+            Basement.CopyFrom(map);
+            Basement.Refresh();
         }
     }
 }

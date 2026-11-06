@@ -27,11 +27,12 @@ namespace FSO.LotView.Model
         /// <summary>
         /// Only read these arrays, do not modify them!
         /// </summary>
-        public WallTile[][] Walls;
-        public List<int>[] WallsAt;
+        //per level, by level - 1; [-1] is the basement, level 0 (see LevelArray)
+        public LevelArray<WallTile[]> Walls;
+        public LevelArray<List<int>> WallsAt;
         public WallComponent WallComp;
 
-        public FloorTile[][] Floors;
+        public LevelArray<FloorTile[]> Floors;
         public FloorComponent FloorComp;
         public _3DFloorGeometry FloorGeom;
 
@@ -100,7 +101,7 @@ namespace FSO.LotView.Model
         public float OutsideWeatherTintP;
 
         public RoomLighting[] Light = new RoomLighting[0];
-        public uint[][] RoomMap;
+        public LevelArray<uint[]> RoomMap;
         public byte[] Indoors;
         public List<Room> Rooms = new List<Room>();
 
@@ -135,13 +136,13 @@ namespace FSO.LotView.Model
             }
         
             RoomColors = new Color[65536];
-            this.WallsAt = new List<int>[Stories];
-            this.Walls = new WallTile[Stories][];
-            this.RoomMap = new uint[Stories][];
+            this.WallsAt = new LevelArray<List<int>>(Stories);
+            this.Walls = new LevelArray<WallTile[]>(Stories);
+            this.RoomMap = new LevelArray<uint[]>(Stories);
 
-            this.Floors = new FloorTile[Stories][];
+            this.Floors = new LevelArray<FloorTile[]>(Stories);
 
-            for (int i=0; i<Stories; i++)
+            for (int i = LevelArray<int>.MinIndex; i<Stories; i++) //the basement (-1) and up
             {
                 this.WallsAt[i] = new List<int>();
                 this.Walls[i] = new WallTile[numTiles];
@@ -156,10 +157,66 @@ namespace FSO.LotView.Model
             this.SM64 = new SM64Component(this);
         }
 
+        /// <summary>Foundations on the ground floor (raised tiles and their steps), shared with the simulation. Null for none.</summary>
+        public FoundationMap Foundations;
+
+        /// <summary>The basement's dug out tiles (level 0), shared with the simulation. Null or empty for none.</summary>
+        public BasementMap Basement;
+
+        private bool HasFoundations => Foundations != null && Foundations.Any;
+
+        /// <summary>The height of a tile's centre: the ground, and the tile's foundation if it has one.</summary>
         public float GetAltitude(int x, int y)
         {
             if (x <= 0 || y <= 0) return 0f;
-            return (AltitudeCenters[((y % Height) * Width + (x % Width))] - BaseAlt) * TerrainFactor;
+            var raise = HasFoundations ? Foundations.RaiseOf(x % Width, y % Height) : 0;
+            return (AltitudeCenters[((y % Height) * Width + (x % Width))] - BaseAlt + raise) * TerrainFactor;
+        }
+
+        /// <summary>
+        /// The height a tile's walls stand at: the ground under the tile, raised to the higher of the foundations either
+        /// side of each wall (a wall on a foundation's edge stands on the foundation, whichever tile it belongs to).
+        /// </summary>
+        public float GetWallAltitude(int x, int y, WallSegments segments)
+        {
+            if (x <= 0 || y <= 0) return 0f;
+            var raise = HasFoundations ? Foundations.WallRaise(x % Width, y % Height, segments) : 0;
+            return (AltitudeCenters[((y % Height) * Width + (x % Width))] - BaseAlt + raise) * TerrainFactor;
+        }
+
+        /// <summary>The height at a tile corner (x, y): the ground, raised to the highest foundation touching the corner.</summary>
+        public float GetCornerAltitude(int x, int y)
+        {
+            if (x <= 0 || y <= 0) return 0f;
+            var raise = HasFoundations ? Foundations.RaiseNear(x, y, 0.25f) : 0;
+            return (AltitudeCenters[((y % Height) * Width + (x % Width))] - BaseAlt + raise) * TerrainFactor;
+        }
+
+        /// <summary>The highest foundation (in height, like <see cref="InterpAltitude"/>) within <paramref name="radius"/> tiles of a point.</summary>
+        public float FoundationNear(float x, float y, float radius)
+        {
+            return HasFoundations ? Foundations.RaiseNear(x, y, radius) * TerrainFactor : 0f;
+        }
+
+        /// <summary>A tile's own foundation raise, in height (0 for none).</summary>
+        public float FoundationAt(int x, int y)
+        {
+            return HasFoundations ? Foundations.RaiseOf(x, y) * TerrainFactor : 0f;
+        }
+
+        /// <summary>
+        /// The height of an object attached to walls: its tile's, unless a wall it's attached to stands on a higher
+        /// foundation (a window on the outside of a wall on a foundation's edge).
+        /// </summary>
+        public float WallObjectAltitude(Vector3 position, WallSegments attached)
+        {
+            var result = InterpAltitude(position);
+            if (!HasFoundations || attached == 0) return result;
+            int x = (int)Math.Floor(position.X), y = (int)Math.Floor(position.Y);
+            var own = Foundations.RaiseOf(x, y);
+            var wall = Foundations.WallRaise(x, y, attached);
+            if (wall > own) result += (wall - own) * TerrainFactor;
+            return result;
         }
 
 
@@ -170,7 +227,18 @@ namespace FSO.LotView.Model
             return (Altitude[((y % Height) * Width + (x % Width))]);
         }
 
+        /// <summary>
+        /// The height under a point (tile units): the ground, and the foundation there (partway up, on steps).
+        /// </summary>
         public float InterpAltitude(Vector3 Position)
+        {
+            var result = TerrainAltitude(Position);
+            if (HasFoundations) result += Foundations.RaiseAt(Position.X, Position.Y) * TerrainFactor;
+            return result;
+        }
+
+        /// <summary>The height of the ground itself under a point (tile units), without foundations.</summary>
+        public float TerrainAltitude(Vector3 Position)
         {
             if (Altitude == null) return 0f;
             var baseX = (int)Math.Max(1, Math.Min(Width-1, Math.Floor(Position.X)));

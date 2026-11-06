@@ -1,5 +1,6 @@
 ﻿using FSO.SimAntics.NetPlay.Model;
 using System.IO;
+using FSO.SimAntics.Model;
 using FSO.SimAntics.Marshals.Threads;
 using FSO.SimAntics.Model.TSOPlatform;
 using System.IO.Compression;
@@ -24,7 +25,7 @@ namespace FSO.SimAntics.Marshals
         // 36 - FSO Inventory Token (inventory ops async state has temp list)
         // 37 - Inventory Token Total
         // 38 - Direct Control Frame
-        public static readonly int LATEST_VERSION = 38;
+        public static readonly int LATEST_VERSION = 40; //39: foundations, at the end of the save; 40: the basement (level 0), after them
 
         public int Version = LATEST_VERSION;
         public bool Compressed = true;
@@ -110,6 +111,21 @@ namespace FSO.SimAntics.Marshals
                     Tuning = new DynamicTuning(reader);
             }
 
+            //39: foundations, last, so builds without them still read everything before
+            if (Version > 38)
+            {
+                var foundations = VMArchitectureTerrain.ReadFoundations(reader);
+                Context.Architecture.Foundations = foundations;
+                Context.Architecture.Terrain?.SetFoundations(foundations);
+            }
+
+            //40: the basement (level 0), after the foundations, for the same reason
+            if (Version > 39)
+            {
+                Context.Architecture.ReadBasement(reader);
+                Context.Architecture.Terrain?.SetBasement(Context.Architecture.Basement);
+            }
+
             if (Compressed)
             {
                 reader.BaseStream.Close();
@@ -169,6 +185,9 @@ namespace FSO.SimAntics.Marshals
 
             writer.Write(Tuning != null);
             if (Tuning != null) Tuning.SerializeInto(writer);
+
+            VMArchitectureTerrain.WriteFoundations(writer, Context.Architecture?.Foundations);
+            VMArchitectureMarshal.WriteBasement(writer, Context.Architecture?.Basement, Context.Architecture?.BasementWalls, Context.Architecture?.BasementFloors);
 
             if (Compressed)
             {

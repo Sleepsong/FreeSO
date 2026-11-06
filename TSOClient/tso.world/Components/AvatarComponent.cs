@@ -118,6 +118,11 @@ namespace FSO.LotView.Components
             }
         }
 
+        public override void RefreshAltitude()
+        {
+            if (Container == null) Position = _Position;
+        }
+
         public Vector3 StoredPosition
         {
             get { return _Position; }

@@ -30,6 +30,55 @@ namespace FSO.SimAntics.Marshals
 
         public byte[] Preserialized;
 
+        /// <summary>
+        /// A copy of the foundations when saved (null for none). Not written with the architecture: VMMarshal puts
+        /// them at the end of the save (version 39), where builds without foundations don't read.
+        /// </summary>
+        public FoundationMap Foundations;
+
+        /// <summary>
+        /// The basement (level 0) when saved: its dug out tiles, walls and floors. Like the foundations, not written with
+        /// the architecture: VMMarshal puts it at the end of the save (version 40). Null in older saves: no basement.
+        /// </summary>
+        public BasementMap Basement;
+        public WallTile[] BasementWalls;
+        public FloorTile[] BasementFloors;
+
+        /// <summary>Writes the basement (a lot's level 0: dug out tiles, walls, floors), for the end of a save.</summary>
+        public static void WriteBasement(BinaryWriter writer, BasementMap map, WallTile[] walls, FloorTile[] floors)
+        {
+            var has = map != null && map.Any && walls != null && floors != null;
+            writer.Write(has);
+            if (!has) return;
+            writer.Write(map.Width);
+            writer.Write(map.Height);
+            writer.Write(map.Dug);
+            VMSerializableUtils.WriteArray(writer, map.Pattern);
+            writer.Write(walls.Length);
+            var savedWalls = new WallTileSerialized[walls.Length];
+            for (int i = 0; i < walls.Length; i++) WallTileSerializer.SerializeInto(in walls[i], ref savedWalls[i]);
+            VMSerializableUtils.WriteArray(writer, savedWalls);
+            VMSerializableUtils.WriteArray(writer, floors);
+        }
+
+        /// <summary>Reads what <see cref="WriteBasement"/> wrote into this marshal (nothing if the lot had no basement).</summary>
+        public void ReadBasement(BinaryReader reader)
+        {
+            if (!reader.ReadBoolean()) return;
+            int width = reader.ReadInt32(), height = reader.ReadInt32();
+            var map = new BasementMap(width, height);
+            map.Dug = reader.ReadBytes(width * height);
+            map.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
+            map.Refresh();
+            Basement = map;
+            var size = reader.ReadInt32();
+            var savedWalls = VMSerializableUtils.ReadArray<WallTileSerialized>(reader, size);
+            var walls = new WallTile[size];
+            for (int i = 0; i < size; i++) WallTileSerializer.Deserialize(in savedWalls[i], ref walls[i]);
+            BasementWalls = walls;
+            BasementFloors = VMSerializableUtils.ReadArray<FloorTile>(reader, size);
+        }
+
         public int Version;
         public VMArchitectureMarshal() { }
         public VMArchitectureMarshal(int version) { Version = version; }
