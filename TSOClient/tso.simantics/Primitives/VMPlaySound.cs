@@ -23,9 +23,18 @@ namespace FSO.SimAntics.Primitives
             var lastThread = owner.SoundThreads.FirstOrDefault(x => x?.Name == fwav?.Name);
 
             if ((lastThread?.Sound as HITThread)?.Interruptable == true) lastThread = null;
+            var trace = FSO.Content.TS1.TS1Audio.Trace;
+            if (trace != null)
+            {
+                trace("Play Sound " + ((fwav != null) ? "'" + fwav.Name + "'" : "event #" + operand.EventID + " (no such event: nothing played)")
+                    + " by " + (owner.Object?.OBJ?.ChunkLabel ?? "object") + " " + owner.ObjectID + " at " + owner.Position
+                    + (operand.NoPan ? ", no pan" : "") + (operand.NoZoom ? ", no zoom" : "") + (operand.Loop ? ", loop" : "")
+                    + ((fwav != null && lastThread != null) ? ": skipped, it's already playing one" + (lastThread.Sound.Dead ? " (finished)" : "") : ""));
+            }
             if (fwav != null && lastThread == null)
             {
                 var thread = HITVM.Get().PlaySoundEvent(fwav.Name);
+                if (thread == null) trace?.Invoke("  '" + fwav.Name + "' gave nothing to play.");
                 if (thread != null)
                 {
                     if (owner == null) return VMPrimitiveExitCode.GOTO_TRUE;

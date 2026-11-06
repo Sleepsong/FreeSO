@@ -34,6 +34,12 @@ namespace FSO.Content.TS1
         /// are otherwise silent. Each message is noted once.
         /// </summary>
         public static Action<string> Note;
+
+        /// <summary>
+        /// A line for every sound the game asks for, and what came of it, for a sound log (the frontend sets it, e.g. with
+        /// -soundlog). Off unless set: games ask for a lot of sounds.
+        /// </summary>
+        public static Action<string> Trace;
         private static HashSet<string> Noted = new HashSet<string>();
 
         public static void NoteOnce(string message)

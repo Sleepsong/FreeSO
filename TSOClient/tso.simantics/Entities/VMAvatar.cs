@@ -474,9 +474,12 @@ namespace FSO.SimAntics
 
             var soundevt = tp.Properties["sound"];
             var owner = this;
+            if (UseWorld && soundevt != null) FSO.Content.TS1.TS1Audio.Trace?.Invoke("Animation sound '" + soundevt + "' for "
+                + (Object?.OBJ?.ChunkLabel ?? "Sim") + " " + ObjectID + " at " + Position);
             if (UseWorld && soundevt != null && owner.SoundThreads.FirstOrDefault(x => x.Name == soundevt) == null)
             {
                 var thread = FSO.HIT.HITVM.Get().PlaySoundEvent(soundevt);
+                if (thread == null) FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + soundevt + "' gave nothing to play.");
                 if (thread != null)
                 {
 

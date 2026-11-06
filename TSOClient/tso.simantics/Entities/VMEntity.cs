@@ -414,6 +414,8 @@ namespace FSO.SimAntics
                     {
                         //a sound that starts silent because of where its owner is leaves no other trace
                         SoundThreads[i].VolumeChecked = true;
+                        FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + (SoundThreads[i].Name ?? sound.Name) + "' starts at volume " + volume.ToString("0.00")
+                            + " (" + ((rcs != null) ? "3D" : "2D") + " camera" + (sound.Dead ? ", already finished" : "") + ").");
                         if (volume < 0.01f)
                         {
                             var why = (Position == LotTilePos.OUT_OF_WORLD) ? "its owner is off the lot"
