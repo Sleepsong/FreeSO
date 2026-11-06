@@ -240,10 +240,12 @@ namespace FSO.LotView.Components
                     var bl = new Vector3(tl.X, 0.0f, tl.Z + quadHeight);
                     var br = new Vector3(tl.X + quadWidth, 0.0f, tl.Z + quadHeight);
 
-                    tl.Y = GetElevationPoint(x, y);
-                    tr.Y = GetElevationPoint(x + 1, y);
-                    bl.Y = GetElevationPoint(x, y + 1);
-                    br.Y = GetElevationPoint(x + 1, y + 1);
+                    // a foundation raises the whole tile (the floors drawn on it, on every level, use these vertices)
+                    var raise = Bp.FoundationAt(x, y) * 3;
+                    tl.Y = GetElevationPoint(x, y) + raise;
+                    tr.Y = GetElevationPoint(x + 1, y) + raise;
+                    bl.Y = GetElevationPoint(x, y + 1) + raise;
+                    br.Y = GetElevationPoint(x + 1, y + 1) + raise;
 
                     Indexes[indexOffset++] = geomOffset;
                     Indexes[indexOffset++] = (geomOffset + 1);

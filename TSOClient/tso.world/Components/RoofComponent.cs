@@ -472,7 +472,9 @@ namespace FSO.LotView.Components
 
         private Vector3 ToWorldPos(int x, int y, int z, int level, float pitch)
         {
-            return new Vector3((x / 16f) * 3f, (z * pitch / 16f) * 3f + ((level - 1) * 2.95f * 3f) + blueprint.GetAltitude(x / 16, y / 16) * 3, (y / 16f) * 3f);
+            // on a foundation the roof rises with the walls under it, out to its overhang
+            var alt = blueprint.GetAltitude(x / 16, y / 16) - blueprint.FoundationAt(x / 16, y / 16) + blueprint.FoundationNear(x / 16f, y / 16f, 0.75f);
+            return new Vector3((x / 16f) * 3f, (z * pitch / 16f) * 3f + ((level - 1) * 2.95f * 3f) + alt * 3, (y / 16f) * 3f);
         }
 
         private static Point[] advanceByDir = new Point[]

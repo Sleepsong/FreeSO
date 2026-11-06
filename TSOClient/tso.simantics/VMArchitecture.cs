@@ -62,6 +62,9 @@ namespace FSO.SimAntics
         private bool WallsDirty;
         private bool FloorsDirty;
         private bool TerrainDirty;
+        private bool FoundationsDirty; //a real foundation change: things on the lot need their heights again
+        private bool VisFoundationsChanged; //a build tool's preview changes foundations
+        private bool ShowingVisFoundations;
 
         private bool Redraw;
 
@@ -401,15 +404,30 @@ namespace FSO.SimAntics
                     WorldUI.Altitude = Terrain.Heights;
 
                     WorldUI.AltitudeCenters = Terrain.Centers;
+                    WorldUI.Foundations = Terrain.Foundations;
                     WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState);
 
                 }
                 TerrainDirty = false;
             }
 
+            if (FoundationsDirty)
+            {
+                FoundationsDirty = false;
+                Terrain.Foundations.Refresh();
+                if (VM.UseWorld)
+                {
+                    WorldUI.Foundations = Terrain.Foundations;
+                    WorldUI.Terrain.TerrainDirty = true;
+                    //everything standing on the changed tiles goes up or down with them
+                    foreach (var ent in Context.VM.Entities) ent.WorldUI?.RefreshAltitude();
+                }
+            }
+
             if (VM.UseWorld && Redraw)
             {
                 LastFailReason = 0;
+                VisFoundationsChanged = false;
                 LastTestCost = SimulateCommands(Commands, true);
                 WorldUI.SignalWallChange();
                 WorldUI.SignalFloorChange();
@@ -417,6 +435,13 @@ namespace FSO.SimAntics
                 {
                     WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.VisHeights, Terrain.VisGrass);
                     TerrainDirty = false;
+                }
+                //a build tool previewing foundations shows its copy; otherwise the real ones
+                if (VisFoundationsChanged || ShowingVisFoundations)
+                {
+                    WorldUI.Foundations = VisFoundationsChanged ? Terrain.VisFoundations : Terrain.Foundations;
+                    WorldUI.Terrain.TerrainDirty = true;
+                    ShowingVisFoundations = VisFoundationsChanged;
                 }
             }
 
@@ -633,6 +658,19 @@ namespace FSO.SimAntics
                         var dotCount = VMArchitectureTools.DotTerrain(this, new Point(com.x, com.y), (short)com.pattern);
                         cost += dotCount;
                         break;
+
+                    case VMArchitectureCommandType.FOUNDATION_RECT:
+                        //style: height (0 removes), pattern: the wall covering on the sides
+                        var fCount = VMFoundationTools.PlaceFoundation(this, new Rectangle(com.x, com.y, com.x2, com.y2), (short)com.style, com.pattern);
+                        if (fCount > 0) cost += fCount * FoundationTilePrice;
+                        else if (fCount < 0) cost += fCount * FoundationTileSellback;
+                        break;
+                    case VMArchitectureCommandType.FOUNDATION_STEPS:
+                        //pattern: direction the steps rise toward (255 picks the foundation next to the tile), style: 1 places, 0 removes
+                        var sCount = VMFoundationTools.PlaceFoundationSteps(this, new Point(com.x, com.y), com.pattern, com.style != 0);
+                        if (sCount > 0) cost += sCount * FoundationStepsPrice;
+                        else if (sCount < 0) cost += sCount * FoundationStepsSellback;
+                        break;
                 }
             }
             if (lastAvatar != null && pdCount > 0)
@@ -799,7 +837,35 @@ namespace FSO.SimAntics
         public bool GetTerrainSloped(short tileX, short tileY)
         {
             var off = GetOffset(tileX, tileY);
-            return Terrain.Sloped[off];
+            //foundation steps count as a slope: no walls, and only objects that allow slopes
+            return Terrain.Sloped[off] || (Terrain.Foundations != null && Terrain.Foundations.Steps[off] != 0);
+        }
+
+        public const int FoundationTilePrice = 10;
+        public const int FoundationTileSellback = 7;
+        public const int FoundationStepsPrice = 40;
+        public const int FoundationStepsSellback = 28;
+
+        /// <summary>
+        /// Call after changing <see cref="VMArchitectureTerrain.Foundations"/>: rooms and routing (the foundations'
+        /// edges block Sims), the ground's mesh, floors, walls and everything standing on the lot follow.
+        /// </summary>
+        public void SignalFoundationChange()
+        {
+            Terrain.Foundations.Refresh();
+            if (RealMode)
+            {
+                FoundationsDirty = true;
+                FloorsDirty = true;
+            }
+            else VisFoundationsChanged = true;
+            Redraw = true;
+        }
+
+        /// <summary>A tile's foundation raise (0 for none, or steps).</summary>
+        public short GetFoundation(short tileX, short tileY)
+        {
+            return Terrain.Foundations?.RaiseOf(tileX, tileY) ?? 0;
         }
 
         public void SetTerrainHeight(short tileX, short tileY, short height)
@@ -920,6 +986,9 @@ namespace FSO.SimAntics
             {
                 //first check if we're supported
                 if (floor.Pattern > 65533 && level > 1 && RoomData[(int)Rooms[level - 2].Map[offset]&0xFFFF].IsOutside) return false;
+                //no pools in a foundation, or on its steps
+                if (floor.Pattern > 65533 && level == 1 && Terrain.Foundations != null
+                    && (Terrain.Foundations.Raise[offset] != 0 || Terrain.Foundations.Steps[offset] != 0)) return false;
                 if (floor.Pattern > 0 && level > 1 && !Supported[level - 2][offset]) return false;
                 //check if objects need/don't need floors
                 if (!Context.CheckFloorValid(LotTilePos.FromBigTile((short)tileX, (short)tileY, level), floor)) return false;
@@ -973,6 +1042,7 @@ namespace FSO.SimAntics
             Height = input.Height;
             Stories = input.Stories;
             Terrain = input.Terrain;
+            FoundationsDirty = true;
 
             Walls = input.Walls;
             Floors = input.Floors;

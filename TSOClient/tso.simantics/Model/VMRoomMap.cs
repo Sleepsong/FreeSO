@@ -25,6 +25,7 @@ namespace FSO.SimAntics.Model
             //values of 0 indicate the room has not been chosen in that location yet.
 
             bool noFloorBad = (rooms.Count > 1);
+            var foundations = context?.Architecture?.Terrain?.Foundations;
 
             this.Width = width;
             this.Height = height;
@@ -180,6 +181,8 @@ namespace FSO.SimAntics.Model
                             if (PXWalls.TopLeftThick) wallLines?.AddLine(obsX + 16, obsY, 0);
                             else fenceLines?.AddLine(obsX + 16, obsY, 0);
                         }
+
+                        AddFoundationEdges(foundations, item.X, item.Y, wallObs);
 
                         bool segAllow = ((PXWalls.Segments & WallSegments.TopLeft) == 0);
                         if ((segAllow || PXWalls.TopLeftStyle != 1) && ((itemT.Dir & WallSegments.BottomRight) > 0))
@@ -385,6 +388,20 @@ namespace FSO.SimAntics.Model
             }
 
             spread.Push(new SpreadItem(new Point(x, y), validSpread));
+        }
+
+        /// <summary>
+        /// A foundation's edges round a tile, as obstacles like walls: Sims can't step off a foundation, or onto one,
+        /// except by its steps (see <see cref="FoundationMap.EdgeBlocked"/>). In 1/16 tile units, 3 either side of the edge.
+        /// </summary>
+        public static void AddFoundationEdges(FoundationMap map, int x, int y, List<VMObstacle> obstacles)
+        {
+            if (map == null || !map.Any) return;
+            int ox = x << 4, oy = y << 4;
+            if (map.EdgeBlocked(x, y, 0)) obstacles.Add(new VMObstacle(ox - 3, oy - 3, ox + 19, oy + 3)); //-y edge
+            if (map.EdgeBlocked(x, y, 1)) obstacles.Add(new VMObstacle(ox + 13, oy - 3, ox + 19, oy + 19)); //+x edge
+            if (map.EdgeBlocked(x, y, 2)) obstacles.Add(new VMObstacle(ox - 3, oy + 13, ox + 19, oy + 19)); //+y edge
+            if (map.EdgeBlocked(x, y, 3)) obstacles.Add(new VMObstacle(ox - 3, oy - 3, ox + 3, oy + 19)); //-x edge
         }
 
         public List<VMObstacle> GenerateRoomObs(ushort room, sbyte level, Rectangle bounds, VMContext context)

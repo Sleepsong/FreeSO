@@ -89,13 +89,40 @@ namespace FSO.LotView.Components
                     }
                     else
                     {
+                        // steps, and foundations with nothing laid on them, are drawn by the foundation models
+                        if (i == 0 && HiddenByFoundation(j, pat)) continue;
                         var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), buildMode);
                         if (convert == 0 && i > 0) continue;
                         lvl.AddTile(convert, (ushort)j);
                     }
                 }
+                if (i == 0) AddFoundations(lvl);
                 lvl.RegenAll(gd);
             }
+        }
+
+        /// <summary>
+        /// Whether a ground floor tile is drawn by the foundation models instead: steps, and a foundation's top where
+        /// nothing is laid on it (no grass on a foundation).
+        /// </summary>
+        private bool HiddenByFoundation(int index, ushort pattern)
+        {
+            var map = Bp.Foundations;
+            if (map == null || !map.Any) return false;
+            if (map.Steps[index] != 0 && map.StepTop(index % map.Width, index / map.Width) > 0) return true;
+            return pattern == 0 && map.Raise[index] > 0;
+        }
+
+        /// <summary>One model per wall covering for the foundations' sides, bare tops and steps.</summary>
+        private void AddFoundations(FloorLevel lvl)
+        {
+            var map = Bp.Foundations;
+            if (map == null || !map.Any) return;
+            var patterns = new HashSet<ushort>();
+            for (int y = 0; y < map.Height; y++)
+                for (int x = 0; x < map.Width; x++)
+                    if (Modelled3DFoundation.HasGeometry(map, x, y)) patterns.Add(map.Pattern[y * map.Width + x]);
+            foreach (var pattern in patterns) lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, pattern));
         }
 
         public void SliceReset(GraphicsDevice gd, Rectangle slice)
@@ -113,11 +140,13 @@ namespace FSO.LotView.Components
                         var j = y * Bp.Width + x;
                         var pat = data[j].Pattern;
                         if ((j + 1) % Bp.Width < 2) continue;
+                        if (i == 0 && HiddenByFoundation(j, pat)) continue;
                         var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), false);
                         if (convert == 0 && i > 0) continue;
                         lvl.AddTile(convert, (ushort)j);
                     }
                 }
+                if (i == 0) AddFoundations(lvl);
                 lvl.RegenAll(gd);
             }
         }
@@ -135,10 +164,12 @@ namespace FSO.LotView.Components
                     if (!buildable[j]) continue;
                     var pat = data[j].Pattern;
                     if ((j + 1) % Bp.Width < 2) continue;
+                    if (i == 0 && HiddenByFoundation(j, pat)) continue;
                     var convert = PatternConvert(pat, (ushort)j, (sbyte)(i + 1), false);
                     if (convert == 0 && i > 0) continue;
                     lvl.AddTile(convert, (ushort)j);
                 }
+                if (i == 0) AddFoundations(lvl);
                 lvl.RegenAll(gd);
             }
         }
@@ -520,6 +551,31 @@ namespace FSO.LotView.Components
                         e.Water = false;
                     }
                 }
+
+                // foundations: their sides, bare tops and steps, with the ground floor
+                foreach (var fnd in floor.FoundationGroups)
+                {
+                    if (fnd.PrimitiveCount == 0 || fnd.GPUData == null) continue;
+                    fnd.ResolveTexture(gd, state);
+                    e.TexMatrix = new Vector4(1, 0, 0, 1);
+                    e.ScreenAlignUV = false;
+                    e.GrassShininess = 0.02f;
+                    e.Bias = -0.5f;
+                    e.UseTexture = true;
+                    e.IgnoreColor = true;
+                    gd.Indices = fnd.GPUData;
+                    gd.SetVertexBuffer(fnd.VertGPUData);
+                    var ftex = fnd.GetTexture(gd);
+                    e.BaseTex = ftex;
+                    if (ftex != null) e.TexSize = new Vector2(ftex.Width, ftex.Height);
+                    pass.Apply();
+                    gd.SamplerStates[0] = CustomWrap;
+                    gd.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, fnd.PrimitiveCount);
+                    gd.SetVertexBuffer(Bp.Terrain.VertexBuffer);
+                    e.TexMatrix = tmat;
+                    e.ScreenAlignUV = screenAlignUV;
+                    e.Bias = -999;
+                }
             }
             e.Water = false;
             Alt = !Alt;
@@ -604,6 +660,8 @@ namespace FSO.LotView.Components
     public class FloorLevel : IDisposable
     {
         public Dictionary<ushort, FloorTileGroup> GroupForTileType = new Dictionary<ushort, FloorTileGroup>();
+        /// <summary>The foundations' models (ground floor only), one per wall covering.</summary>
+        public List<Modelled3DFoundation> FoundationGroups = new List<Modelled3DFoundation>();
         public ushort[] Tiles;
         private Blueprint Bp;
 
@@ -661,6 +719,7 @@ namespace FSO.LotView.Components
             {
                 group.Value.PrepareGPU(gd);
             }
+            foreach (var group in FoundationGroups) group.PrepareGPU(gd);
 
             Bp.SM64?.UpdateFloors();
         }
@@ -669,6 +728,7 @@ namespace FSO.LotView.Components
         {
             Dispose();
             GroupForTileType.Clear();
+            FoundationGroups.Clear();
         }
 
         public void Dispose()
@@ -677,6 +737,7 @@ namespace FSO.LotView.Components
             {
                 group.Value.Dispose();
             }
+            foreach (var group in FoundationGroups) group.Dispose();
         }
     }
 

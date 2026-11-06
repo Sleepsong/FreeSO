@@ -110,11 +110,15 @@ namespace FSO.LotView.RC
                     var g = Fetch(tex, mask, style, grp);
                     g.UseOffset = (topMode != 4);
 
+                    // a wall on a foundation's edge stands on the foundation: both its faces (either side of the edge) and
+                    // its end caps take the highest foundation beside the line
+                    var mid = (from + to) / 2 + new Vector2(x, y);
+                    var raise = blueprint.FoundationNear(mid.X, mid.Y, 0.2f);
                     var p1 = new Vector3(from.X + x, from.Y + y, 0);
-                    var a1 = blueprint.InterpAltitude(p1) + (level - 1) * 2.95f;
+                    var a1 = blueprint.TerrainAltitude(p1) + raise + (level - 1) * 2.95f;
                     p1.Z = a1;
                     var p2 = new Vector3(to.X + x, to.Y + y, 0);
-                    var a2 = blueprint.InterpAltitude(p2) + (level - 1) * 2.95f;
+                    var a2 = blueprint.TerrainAltitude(p2) + raise + (level - 1) * 2.95f;
                     p2.Z = a2;
 
                     //generate the geometry for this line

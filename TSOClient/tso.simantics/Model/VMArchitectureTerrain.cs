@@ -1,4 +1,5 @@
 ﻿using FSO.Content.Model;
+using FSO.LotView.Model;
 using FSO.SimAntics.NetPlay.Model;
 using FSO.SimAntics.Utils;
 using System;
@@ -21,6 +22,12 @@ namespace FSO.SimAntics.Model
         private short[] OldHeights;
         private byte[] OldGrass;
 
+        /// <summary>Foundations and their steps (see <see cref="FoundationMap"/>), shared with the world for drawing.</summary>
+        public FoundationMap Foundations;
+        /// <summary>The copy previews (build tools dragging) change, while <see cref="EnterVis"/> is in effect.</summary>
+        public FoundationMap VisFoundations;
+        private FoundationMap OldFoundations;
+
         public TerrainType LightType = TerrainType.GRASS;
         public TerrainType DarkType = TerrainType.GRASS;
         public int Version;
@@ -40,6 +47,9 @@ namespace FSO.SimAntics.Model
 
             VisHeights = new short[width * height];
             VisGrass = new byte[width * height];
+
+            Foundations = new FoundationMap(width, height);
+            VisFoundations = new FoundationMap(width, height);
         }
 
         public void EnterVis()
@@ -52,12 +62,18 @@ namespace FSO.SimAntics.Model
 
             Heights = VisHeights;
             GrassState = VisGrass;
+
+            OldFoundations = Foundations;
+            VisFoundations.CopyFrom(Foundations);
+            Foundations = VisFoundations;
         }
 
         public void ExitVis()
         {
             Heights = OldHeights;
             GrassState = OldGrass;
+            if (OldFoundations != null) Foundations = OldFoundations;
+            OldFoundations = null;
         }
 
         public void RegenerateCenters() //TODO: partial update
@@ -244,6 +260,16 @@ namespace FSO.SimAntics.Model
             VMSerializableUtils.WriteArray(writer, Heights);
             writer.Write(GrassState.Length);
             writer.Write(GrassState);
+
+            // version 39: foundations (only stored if the lot has any)
+            var hasFoundations = Foundations != null && Foundations.Any;
+            writer.Write(hasFoundations);
+            if (hasFoundations)
+            {
+                VMSerializableUtils.WriteArray(writer, Foundations.Raise);
+                writer.Write(Foundations.Steps);
+                VMSerializableUtils.WriteArray(writer, Foundations.Pattern);
+            }
         }
 
         public void Deserialize(BinaryReader reader)
@@ -262,6 +288,17 @@ namespace FSO.SimAntics.Model
             }
             
             GrassState = reader.ReadBytes(reader.ReadInt32());
+
+            Foundations = new FoundationMap(Width, Height);
+            VisFoundations = new FoundationMap(Width, Height);
+            if (Version > 38 && reader.ReadBoolean())
+            {
+                var size = Width * Height;
+                Foundations.Raise = VMSerializableUtils.ReadArray<short>(reader, size);
+                Foundations.Steps = reader.ReadBytes(size);
+                Foundations.Pattern = VMSerializableUtils.ReadArray<ushort>(reader, size);
+                Foundations.Refresh();
+            }
         }
     }
 }
