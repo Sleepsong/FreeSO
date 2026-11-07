@@ -3,6 +3,17 @@ using System;
 
 namespace FSO.LotView.Model
 {
+    /// <summary>What a raised tile is, as in The Sims 2's foundation tools.</summary>
+    public enum FoundationKind : byte
+    {
+        /// <summary>A foundation: brick sides (painted like walls) under a dark trim, a bare plywood top.</summary>
+        Foundation = 0,
+        /// <summary>A deck of planks with a board round its edge and lattice under it.</summary>
+        LatticedDeck = 1,
+        /// <summary>A deck of planks with a board round its edge, on columns.</summary>
+        ColumnDeck = 2
+    }
+
     /// <summary>
     /// Foundations, as in The Sims 2: tiles of the ground floor raised a few steps above the ground, with everything on
     /// them (floors, walls, objects, Sims, and the floors above). Each tile has its own raise, in terrain height units
@@ -29,9 +40,16 @@ namespace FSO.LotView.Model
         public byte[] Steps;
         /// <summary>
         /// Per side of each tile, four a tile (<see cref="SideIndex"/>): the wall covering (a wall pattern ID) painted on
-        /// that side of the foundation, 0 for plain concrete. Caps, tops and steps are always concrete.
+        /// that side of the foundation, 0 for its own brick. Only foundations have them painted, not decks.
         /// </summary>
         public ushort[] Sides;
+        /// <summary>Per tile: what kind of foundation it is (see <see cref="FoundationKind"/>).</summary>
+        public byte[] Kind;
+        /// <summary>
+        /// Per tile with steps: the staircase (its catalog GUID) whose bottom piece they are, 0 for the plain steps
+        /// (when the game has no staircase to take them from).
+        /// </summary>
+        public uint[] StepStyle;
 
         /// <summary>True if any tile has a foundation or steps (kept up to date by <see cref="Refresh"/>).</summary>
         public bool Any { get; private set; }
@@ -43,6 +61,8 @@ namespace FSO.LotView.Model
             Raise = new short[width * height];
             Steps = new byte[width * height];
             Sides = new ushort[width * height * 4];
+            Kind = new byte[width * height];
+            StepStyle = new uint[width * height];
         }
 
         public FoundationMap Clone()
@@ -61,10 +81,14 @@ namespace FSO.LotView.Model
                 Raise = new short[Width * Height];
                 Steps = new byte[Width * Height];
                 Sides = new ushort[Width * Height * 4];
+                Kind = new byte[Width * Height];
+                StepStyle = new uint[Width * Height];
             }
             Array.Copy(other.Raise, Raise, Raise.Length);
             Array.Copy(other.Steps, Steps, Steps.Length);
             Array.Copy(other.Sides, Sides, Sides.Length);
+            Array.Copy(other.Kind, Kind, Kind.Length);
+            Array.Copy(other.StepStyle, StepStyle, StepStyle.Length);
             Any = other.Any;
         }
 
@@ -89,6 +113,12 @@ namespace FSO.LotView.Model
         {
             for (int dir = 0; dir < 4; dir++) Sides[index * 4 + dir] = pattern;
         }
+
+        /// <summary>What kind of foundation a tile is (a plain foundation off the lot or with none).</summary>
+        public FoundationKind KindOf(int x, int y) => InBounds(x, y) ? (FoundationKind)Kind[y * Width + x] : FoundationKind.Foundation;
+
+        /// <summary>Whether a tile's side can be painted: it shows, and the tile is a foundation (decks can't be).</summary>
+        public bool SidePaintable(int x, int y, int dir) => SideShows(x, y, dir) && KindOf(x, y) == FoundationKind.Foundation;
 
         /// <summary>The tile's foundation raise (0 off the lot, on the ground, or on steps).</summary>
         public short RaiseOf(int x, int y) => InBounds(x, y) ? Raise[y * Width + x] : (short)0;
