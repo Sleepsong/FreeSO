@@ -995,6 +995,11 @@ namespace FSO.LotView
             var oldCut = bp.Cutaway;
             var oldWalls = bp.WCRC;
             var oldTargets = gd.GetRenderTargets();
+            //(drawn while the UI's sprite batch is open: what the lot's draw changes is put back for it)
+            var oldBlend = gd.BlendState;
+            var oldDepth = gd.DepthStencilState;
+            var oldRaster = gd.RasterizerState;
+            var oldSampler = gd.SamplerStates[0];
             var doors = new List<Tuple<ObjectComponent, bool>>();
             try
             {
@@ -1038,6 +1043,7 @@ namespace FSO.LotView
                 gd.SetRenderTarget(pic.Target);
                 cam.ProjectionDirty(); //square, not the screen's shape
                 InternalDraw(gd);
+                MakeOpaque(gd, pic.Target);
                 return true;
             }
             finally
@@ -1053,7 +1059,33 @@ namespace FSO.LotView
                 else gd.SetRenderTarget(null);
                 cam.ProjectionDirty();
                 State.PrepareCamera();
+                gd.BlendState = oldBlend;
+                gd.DepthStencilState = oldDepth;
+                gd.RasterizerState = oldRaster;
+                gd.SamplerStates[0] = oldSampler;
             }
+        }
+
+        private static readonly BlendState AlphaToOne = new BlendState
+        {
+            ColorWriteChannels = ColorWriteChannels.Alpha,
+            ColorSourceBlend = Blend.One,
+            ColorDestinationBlend = Blend.Zero,
+            AlphaSourceBlend = Blend.One,
+            AlphaDestinationBlend = Blend.Zero
+        };
+        private SpriteBatch PictureBatch;
+
+        /// <summary>
+        /// The lot's draw leaves the alpha channel as it comes (the main view goes to the screen opaque, so it never
+        /// matters there); a picture is shown blended, so it's made opaque, or parts of it would be see-through.
+        /// </summary>
+        private void MakeOpaque(GraphicsDevice gd, RenderTarget2D target)
+        {
+            if (PictureBatch == null || PictureBatch.IsDisposed) PictureBatch = new SpriteBatch(gd);
+            PictureBatch.Begin(SpriteSortMode.Immediate, AlphaToOne, SamplerState.PointClamp, DepthStencilState.None, RasterizerState.CullNone);
+            PictureBatch.Draw(Common.Utils.TextureGenerator.GetPxWhite(gd), new Rectangle(0, 0, target.Width, target.Height), Color.White);
+            PictureBatch.End();
         }
 
         private bool Refuse(string why)
