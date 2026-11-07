@@ -607,7 +607,10 @@ namespace FSO.LotView.Components
             }
 
             grassDensity *= GrassDensityScale;
+            var underDeck = Bp.FloorGeom.UnderDeckGrass(out var underDeckPrims); //(the grass under column decks, unraised)
+            if (GroundVertexBuffer == null) underDeckPrims = 0;
             var primitives = Bp.FloorGeom.SetGrassIndices(device, Effect, world);
+            var grassIndices = device.Indices;
 
             var parallax = false;
 
@@ -658,6 +661,14 @@ namespace FSO.LotView.Components
                         pass = Effect.CurrentTechnique.Passes[(_3d)?((parallax)?3:2):WorldConfig.Current.PassOffset];
                         pass.Apply();
                         device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, primitives);
+                        if (underDeckPrims > 0)
+                        {
+                            device.SetVertexBuffer(GroundVertexBuffer);
+                            device.Indices = underDeck;
+                            device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, underDeckPrims);
+                            device.SetVertexBuffer(VertexBuffer);
+                            device.Indices = grassIndices;
+                        }
                     }
                     if (FSOEnvironment.UseMRT)
                     {

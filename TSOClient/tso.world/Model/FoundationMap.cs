@@ -222,14 +222,16 @@ namespace FSO.LotView.Model
         }
 
         /// <summary>
-        /// Whether a foundation tile's side shows (and can be painted, and has a cap on top): it drops to lower ground or
-        /// a lower foundation, and no steps lead up to it.
+        /// Whether a foundation tile has a side there (that can be painted): it drops to lower ground or a lower
+        /// foundation. Steps up to it stand in front of it (plain steps cover it; see Modelled3DFoundation.Capped).
         /// </summary>
-        public bool SideShows(int x, int y, int dir)
+        public bool SideShows(int x, int y, int dir) => SideDrop(x, y, dir) > 0;
+
+        /// <summary>Whether steps lead up to a tile's side (the steps' tile is beside it, rising toward it).</summary>
+        public bool StepsUpTo(int x, int y, int dir)
         {
-            if (SideDrop(x, y, dir) <= 0) return false;
             var d = Directions[dir];
-            return StepDirection(x + d.X, y + d.Y) != (dir + 2) % 4;
+            return StepDirection(x + d.X, y + d.Y) == (dir + 2) % 4;
         }
     }
 }

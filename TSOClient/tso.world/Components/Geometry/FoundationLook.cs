@@ -41,9 +41,9 @@ namespace FSO.LotView.Components.Geometry
         private static ushort? Brick;
         private static ushort? LatticeWall;
 
-        private static readonly string[] PlywoodWords = { "plywood", "particle", "subfloor", "sub-floor", "sub floor", "unfinished", "pine", "birch", "maple", "light wood", "oak", "wood" };
-        private static readonly string[] TrimWords = { "walnut", "mahogany", "dark wood", "ebony", "cherry", "teak", "dark", "wood" };
-        private static readonly string[] DeckWords = { "redwood", "cedar", "deck", "boardwalk", "plank", "hardwood", "teak", "oak", "pine", "wood" };
+        private static readonly string[] PlywoodWords = { "plywood", "particle", "subfloor", "unfinished", "pine", "birch", "maple", "light", "oak", "wood", "wooden", "hardwood", "planks", "plank" };
+        private static readonly string[] TrimWords = { "walnut", "mahogany", "ebony", "cherry", "teak", "dark", "wood", "wooden", "hardwood" };
+        private static readonly string[] DeckWords = { "deck", "decking", "redwood", "cedar", "boardwalk", "planks", "plank", "hardwood", "teak", "oak", "pine", "wood", "wooden", "parquet" };
         private static readonly string[] ColumnWords = { "concrete", "cement", "stone" };
         /// <summary>Words that make a floor anything but wood, whatever else is in its name ("Deck Tile", "Woodland Stone").</summary>
         private static readonly string[] NotWood = { "stone", "tile", "marble", "granite", "concrete", "cement", "slate", "brick", "carpet", "rug",
@@ -61,11 +61,68 @@ namespace FSO.LotView.Components.Geometry
 
         private static bool Has(string name, string word) => (name ?? "").IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0;
 
+        /// <summary>Whether a name has a whole word ("Oak Planks" has "oak"; "Soaked Tile" doesn't).</summary>
+        private static bool HasWord(string name, string word) => Words(name).Contains(word);
+
+        /// <summary>What wood of each use looks like: brown, and how light (plywood light, trim dark, planks between).</summary>
+        private struct WoodTone { public float MinValue, MaxValue; }
+        private static readonly WoodTone AnyWood = new WoodTone { MinValue = 0.2f, MaxValue = 0.9f };
+
         /// <summary>
-        /// The first floor (by the order of <paramref name="words"/>) whose name has one of them; 0 if none. For wood,
-        /// floors whose names say they're something else are left out.
+        /// A floor's average colour (hue in degrees, saturation and value 0-1), from its near picture's pixels, or null if
+        /// it can't be read.
         /// </summary>
-        private static ushort FindFloor(string key, string[] words, bool wood = false)
+        public static Vector3? AverageHSV(ushort floor)
+        {
+            try
+            {
+                var near = Content.Content.Get().WorldFloors.Get(floor)?.Near;
+                if (near == null || near.Frames.Length == 0) return null;
+                var frame = near.Frames[0];
+                frame.DecodeIfRequired(false);
+                var px = frame.PixelData;
+                if (px == null || px.Length == 0) return null;
+                long r = 0, g = 0, b = 0, n = 0;
+                for (int i = 0; i < px.Length; i += 3)
+                {
+                    if (px[i].A < 128) continue;
+                    r += px[i].R; g += px[i].G; b += px[i].B; n++;
+                }
+                if (n == 0) return null;
+                float rf = r / (255f * n), gf = g / (255f * n), bf = b / (255f * n);
+                float max = Math.Max(rf, Math.Max(gf, bf)), min = Math.Min(rf, Math.Min(gf, bf));
+                float hue = 0;
+                if (max > min)
+                {
+                    if (max == rf) hue = 60 * (((gf - bf) / (max - min)) % 6);
+                    else if (max == gf) hue = 60 * ((bf - rf) / (max - min) + 2);
+                    else hue = 60 * ((rf - gf) / (max - min) + 4);
+                }
+                if (hue < 0) hue += 360;
+                return new Vector3(hue, (max == 0) ? 0 : (max - min) / max, max);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Whether a floor looks like wood (brown, as light as asked), by its colour.</summary>
+        private static bool LooksLikeWood(ushort floor, WoodTone tone)
+        {
+            var hsv = AverageHSV(floor);
+            if (hsv == null) return true; //(can't tell: trust its name)
+            var c = hsv.Value;
+            return c.X >= 12 && c.X <= 50 && c.Y >= 0.18f && c.Z >= tone.MinValue && c.Z <= tone.MaxValue;
+        }
+
+        /// <summary>
+        /// The first floor (by the order of <paramref name="words"/>) whose name has one of them as a whole word; 0 if
+        /// none. Wood (<paramref name="tone"/> given) has to look like it too: floors whose names say they're something
+        /// else are left out, and so are ones that aren't brown (or are lighter or darker than asked). With no name to
+        /// go by, the floor that looks most like that wood.
+        /// </summary>
+        private static ushort FindFloor(string key, string[] words, WoodTone? tone = null)
         {
             lock (FloorCache)
             {
@@ -74,11 +131,19 @@ namespace FSO.LotView.Components.Geometry
                 try
                 {
                     var floors = Floors();
-                    if (wood) floors = floors.Where(f => !NotWood.Any(w => Has(f.Name, w))).ToList();
+                    if (tone != null) floors = floors.Where(f => !NotWood.Any(w => HasWord(f.Name, w))).ToList();
                     foreach (var word in words)
                     {
-                        var match = floors.FirstOrDefault(f => Has(f.Name, word));
+                        var match = floors.FirstOrDefault(f => HasWord(f.Name, word) && (tone == null || LooksLikeWood((ushort)f.ID, tone.Value)));
                         if (match != null) { found = (ushort)match.ID; break; }
+                    }
+                    if (found == 0 && tone != null)
+                    {
+                        // nothing by name: the most wood-like colour, nearest the middle of the lightness asked for
+                        var mid = (tone.Value.MinValue + tone.Value.MaxValue) / 2;
+                        var best = floors.Where(f => LooksLikeWood((ushort)f.ID, tone.Value) && AverageHSV((ushort)f.ID) != null)
+                            .OrderBy(f => Math.Abs(AverageHSV((ushort)f.ID).Value.Z - mid)).FirstOrDefault();
+                        if (best != null) found = (ushort)best.ID;
                     }
                     if (found == 0) found = (ushort)(floors.FirstOrDefault()?.ID ?? 0);
                 }
@@ -115,16 +180,16 @@ namespace FSO.LotView.Components.Geometry
             ushort found = 0;
             try
             {
-                found = (ushort)(Walls().FirstOrDefault(w => Has(w.Name, "lattice"))?.ID ?? 0);
+                found = (ushort)(Walls().FirstOrDefault(w => HasWord(w.Name, "lattice"))?.ID ?? 0);
             }
             catch (Exception) { found = 0; }
             LatticeWall = found;
             return found;
         }
 
-        public static ushort PlywoodFloor() => FindFloor("plywood", PlywoodWords, true);
-        public static ushort TrimFloor() => FindFloor("trim", TrimWords, true);
-        public static ushort DeckFloor() => FindFloor("deck", DeckWords, true);
+        public static ushort PlywoodFloor() => FindFloor("plywood", PlywoodWords, new WoodTone { MinValue = 0.5f, MaxValue = 0.95f });
+        public static ushort TrimFloor() => FindFloor("trim", TrimWords, new WoodTone { MinValue = 0.15f, MaxValue = 0.6f });
+        public static ushort DeckFloor() => FindFloor("deck", DeckWords, new WoodTone { MinValue = 0.3f, MaxValue = 0.8f });
         public static ushort ColumnFloor() => FindFloor("column", ColumnWords);
 
         private static Texture2D FloorTexture(WorldState state, ushort id)
@@ -281,8 +346,47 @@ namespace FSO.LotView.Components.Geometry
             var rise = Array.IndexOf(FoundationMap.Directions, new Point(Math.Sign(dx), Math.Sign(dy)));
             var piece = Content.Content.Get().WorldObjects.Get(low.GUID);
             if (piece == null) { note = "its bottom piece didn't load"; return null; }
-            note = $"bottom piece \"{low.ChunkLabel}\" (0x{low.GUID:X8}) at ({lo.X}, {lo.Y}), top \"{hi.ChunkLabel}\" at ({ho.X}, {ho.Y}): rises toward {FoundationMap.Directions[rise]}";
+
+            // the bottom piece has to draw just its own quarter: some staircases are drawn whole by one piece (and
+            // the rest draw nothing), which would stand a whole flight on the steps' tile, or none
+            var lowHeight = PictureHeight(piece);
+            var others = parts.Where(o => o != low && !Words(o.ChunkLabel).Contains("pad") && !Words(o.ChunkLabel).Contains("stub"))
+                .Select(o => PictureHeight(Content.Content.Get().WorldObjects.Get(o.GUID))).DefaultIfEmpty(0).Max();
+            var measures = $"pictures: bottom {lowHeight}px tall, the others up to {others}px";
+            if (lowHeight <= 0) { note = $"its bottom piece draws nothing ({measures})"; return null; }
+            if (others <= 0 || lowHeight > others * 1.6f) { note = $"its bottom piece draws the whole staircase ({measures})"; return null; }
+
+            note = $"bottom piece \"{low.ChunkLabel}\" (0x{low.GUID:X8}) at ({lo.X}, {lo.Y}), top \"{hi.ChunkLabel}\" at ({ho.X}, {ho.Y}): rises toward {FoundationMap.Directions[rise]}; {measures}";
             return new Stair { Piece = piece, Rise = rise, PieceName = low.ChunkLabel };
+        }
+
+        /// <summary>
+        /// How tall (pixels) an object's picture is, facing north in close-up: from the top of its highest sprite to the
+        /// bottom of its lowest. 0 if it draws nothing.
+        /// </summary>
+        public static int PictureHeight(GameObject obj)
+        {
+            if (obj == null || obj.OBJ.BaseGraphicID == 0) return 0;
+            try
+            {
+                var dgrp = obj.Resource.Get<DGRP>(obj.OBJ.BaseGraphicID);
+                var image = dgrp?.GetImage(1, (uint)WorldZoom.Near, 0);
+                if (image?.Sprites == null) return 0;
+                float top = float.MaxValue, bottom = float.MinValue;
+                foreach (var sprite in image.Sprites)
+                {
+                    var size = sprite.GetDimensions();
+                    if (size.X <= 1 && size.Y <= 1) continue;
+                    //(as DGRPRenderer places them: a sprite's bottom at its offset from the baseline)
+                    top = Math.Min(top, sprite.SpriteOffset.Y - size.Y);
+                    bottom = Math.Max(bottom, sprite.SpriteOffset.Y);
+                }
+                return (bottom > top) ? (int)(bottom - top) : 0;
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
         }
 
         private static HashSet<string> Words(string name) =>
@@ -327,7 +431,12 @@ namespace FSO.LotView.Components.Geometry
                 sb.AppendLine("  deck planks: floor " + floorName(DeckFloor()));
                 sb.AppendLine("  lattice: " + ((LatticeCovering() != 0) ? "wall " + wallName(LatticeCovering()) : "made from the trim's wood"));
                 sb.AppendLine("  columns, plain steps: floor " + floorName(ColumnFloor()));
-                sb.AppendLine("Floors with wood in their name: " + string.Join(", ", floors.Where(f => new[] { "wood", "plank", "deck", "pine", "oak", "ply" }.Any(w => Has(f.Name, w))).Select(f => $"#{f.ID} \"{f.Name}\"")));
+                sb.AppendLine("Every floor, with its average colour (hue, saturation, value):");
+                foreach (var f in floors)
+                {
+                    var hsv = AverageHSV((ushort)f.ID);
+                    sb.AppendLine($"  #{f.ID} \"{f.Name}\" ({f.FileName})" + ((hsv != null) ? $": {hsv.Value.X:0} {hsv.Value.Y:0.00} {hsv.Value.Z:0.00}" : ""));
+                }
                 sb.AppendLine("Walls with brick, stone or lattice in their name: " + string.Join(", ", walls.Where(w => new[] { "brick", "stone", "lattice" }.Any(x => Has(w.Name, x))).Select(w => $"#{w.ID} \"{w.Name}\"")));
                 var styles = new List<string>();
                 for (ushort i = 1; i < 512; i++)

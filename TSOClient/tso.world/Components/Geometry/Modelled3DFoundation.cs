@@ -115,7 +115,7 @@ namespace FSO.LotView.Components.Geometry
                             case FoundationKind.Foundation:
                                 result.Add((FoundationMaterial.Plywood, 0));
                                 for (int dir = 0; dir < 4; dir++)
-                                    if (map.SideShows(x, y, dir)) result.Add((FoundationMaterial.Covering, map.SideOf(x, y, dir)));
+                                    if (Capped(map, x, y, dir)) result.Add((FoundationMaterial.Covering, map.SideOf(x, y, dir)));
                                 break;
                             case FoundationKind.LatticedDeck:
                                 result.Add((FoundationMaterial.Planks, 0));
@@ -170,10 +170,16 @@ namespace FSO.LotView.Components.Geometry
         private float GroundAt(Point p) => GroundAtVertex(p.X, p.Y);
 
         /// <summary>
-        /// Whether a foundation tile's side shows: it drops to lower ground or a lower foundation, and no steps lead up
-        /// to it.
+        /// Whether a foundation tile's side is drawn: it drops to lower ground or a lower foundation, and no plain steps
+        /// cover it (a staircase's piece in front of it doesn't).
         /// </summary>
-        public static bool Capped(FoundationMap map, int x, int y, int dir) => map.SideShows(x, y, dir);
+        public static bool Capped(FoundationMap map, int x, int y, int dir)
+        {
+            if (!map.SideShows(x, y, dir)) return false;
+            if (!map.StepsUpTo(x, y, dir)) return true;
+            var d = FoundationMap.Directions[dir];
+            return FoundationLook.StairFor(map.StepStyle[(y + d.Y) * map.Width + x + d.X]) != null;
+        }
 
         /// <summary>A tile's side's two ends (corner vertices), going clockwise round the tile.</summary>
         public static void EdgeEnds(int x, int y, int dir, out Point a, out Point b)
