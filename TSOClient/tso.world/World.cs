@@ -1014,13 +1014,19 @@ namespace FSO.LotView
         /// doors hide with its cut, roofs and the floors above its floor are hidden. Everything the main view uses is put
         /// back afterwards. Returns false when it can't draw.
         /// </summary>
+        /// <summary>Why <see cref="DrawPicture"/> last drew nothing (null when it last drew): for logs.</summary>
+        public string PictureRefusal;
+
         public bool DrawPicture(GraphicsDevice gd, WorldPicture pic)
         {
-            if (!HasInit || Blueprint == null || pic?.Target == null || pic.Target.IsDisposed) return false;
-            if (State.CameraMode != CameraRenderMode._3D || State.Cameras.ActiveCamera != State.Cameras.Camera3D) return false;
-            if (State.Cameras.TransitionWeights.Count > 0) return false; //the view is a blend of cameras for now
+            PictureRefusal = null;
+            if (!HasInit || Blueprint == null) return Refuse("the lot isn't loaded");
+            if (pic?.Target == null || pic.Target.IsDisposed) return Refuse("the picture has no target");
+            if (State.CameraMode != CameraRenderMode._3D) return Refuse("not in 3D (camera mode " + State.CameraMode + ")");
+            if (State.Cameras.ActiveCamera != State.Cameras.Camera3D) return Refuse("not the 3D camera (" + State.Cameras.ActiveType + ")");
+            if (State.Cameras.TransitionWeights.Count > 0) return Refuse("the camera's in a transition (" + State.Cameras.TransitionWeights.Count + ")"); //the view is a blend of cameras for now
             var bp = Blueprint;
-            if (bp.Cutaway == null || bp.WCRC == null) return false;
+            if (bp.Cutaway == null || bp.WCRC == null) return Refuse("no cutaway or 3D walls");
             var cam = State.Camera3D;
             var oldPos = cam.Position;
             var oldTarget = cam.Target;
@@ -1088,6 +1094,12 @@ namespace FSO.LotView
                 cam.ProjectionDirty();
                 State.PrepareCamera();
             }
+        }
+
+        private bool Refuse(string why)
+        {
+            PictureRefusal = why;
+            return false;
         }
 
         public void ChangeAAMode(GraphicsDevice gd)
