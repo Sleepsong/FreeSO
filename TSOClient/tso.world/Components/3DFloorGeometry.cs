@@ -154,7 +154,6 @@ namespace FSO.LotView.Components
         private void AddFloorTile(int i, FloorLevel lvl, int j, ushort pat, bool buildMode)
         {
             var dug = IsDug(j);
-            if (i == -1 && !dug) lvl.EarthAround.AddIndex((ushort)j); //(the earth, seen round the basement while it's shown)
             if (i == -1 && (!dug || pat == 0)) return;
             if (i == 0 && dug && pat == 0) return; //a hole over the basement (a stairwell), not ground
             // steps, and foundations with nothing laid on them, are drawn by the foundation models
@@ -646,22 +645,8 @@ namespace FSO.LotView.Components
                     e.IgnoreColor = true;
                 }
 
-                // the earth round the basement, while it's shown: the lot's ground, unraised and all brown, on its floor
+                // while the basement's shown (with all above it hidden, round it is the void: see WorldStatic.DrawBg)
                 var basementShown = fi == LevelArray<int>.MinIndex && lightWorld == null && state != null && state.Level < 1;
-                var earthVB = Bp.Terrain?.EarthVertexBuffer;
-                if (basementShown && floor.EarthAround.GPUData != null && floor.EarthAround.GeomForOffset.Count > 0 && earthVB != null)
-                {
-                    e.UseTexture = false;
-                    e.IgnoreColor = false;
-                    e.GrassShininess = 0.02f;
-                    gd.SetVertexBuffer(earthVB);
-                    gd.Indices = floor.EarthAround.GPUData;
-                    pass.Apply();
-                    gd.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, floor.EarthAround.GeomForOffset.Count * 2);
-                    gd.SetVertexBuffer(Bp.Terrain.VertexBuffer);
-                    e.UseTexture = true;
-                    e.IgnoreColor = true;
-                }
 
                 // foundations: their sides, bare tops and steps, with the ground floor
                 // (the earth's sides round the basement stand on its rooms' edges, as walls do: like walls, they take their
@@ -787,11 +772,6 @@ namespace FSO.LotView.Components
         public List<Modelled3DFoundation> FoundationGroups = new List<Modelled3DFoundation>();
         /// <summary>Ground tiles under column decks, drawn as the lot's ground from the unraised ground's vertices.</summary>
         public FloorTileGroup GroundUnderDecks = new FloorTileGroup();
-        /// <summary>
-        /// The basement's: the tiles that aren't dug out, the earth round it. While the basement is shown (and everything above
-        /// it hidden) they're drawn on its floor as the lot's ground, all dead-grass brown: dirt (see TerrainComponent.EarthVertexBuffer).
-        /// </summary>
-        public FloorTileGroup EarthAround = new FloorTileGroup();
         public ushort[] Tiles;
         private Blueprint Bp;
 
@@ -851,7 +831,6 @@ namespace FSO.LotView.Components
             }
             foreach (var group in FoundationGroups) group.PrepareGPU(gd);
             if (GroundUnderDecks.GeomForOffset.Count > 0) GroundUnderDecks.PrepareGPU(gd);
-            if (EarthAround.GeomForOffset.Count > 0) EarthAround.PrepareGPU(gd);
 
             Bp.SM64?.UpdateFloors();
         }
@@ -862,7 +841,6 @@ namespace FSO.LotView.Components
             GroupForTileType.Clear();
             FoundationGroups.Clear();
             GroundUnderDecks = new FloorTileGroup();
-            EarthAround = new FloorTileGroup();
         }
 
         public void Dispose()
@@ -873,7 +851,6 @@ namespace FSO.LotView.Components
             }
             foreach (var group in FoundationGroups) group.Dispose();
             GroundUnderDecks.Dispose();
-            EarthAround.Dispose();
         }
     }
 

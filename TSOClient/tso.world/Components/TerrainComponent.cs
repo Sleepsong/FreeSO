@@ -43,9 +43,8 @@ namespace FSO.LotView.Components
         /// </summary>
         public VertexBuffer GroundVertexBuffer;
         /// <summary>
-        /// The lot's ground as the earth round the basement, seen while the basement's shown (with all above it hidden): unraised,
-        /// and all the dead-grass brown the ground has where grass has died (the game's own dirt). Drawn a storey down, by the
-        /// basement's floor (see FloorLevel.EarthAround), with the grid on it in build mode.
+        /// The lot's ground, unraised (no foundations): the grid's drawn on it a storey down while the basement's shown, over
+        /// the basement and the void round it (see DrawBasementGrid).
         /// </summary>
         public VertexBuffer EarthVertexBuffer;
         public float Alpha = 1f;
@@ -318,15 +317,12 @@ namespace FSO.LotView.Components
             }
 
             {
-                // the earth round the basement: the same ground, unraised, all brown
+                // the ground unraised, for the grid while the basement's shown
                 var earth = (TerrainParallaxVertex[])Geom.Clone();
-                var brown = LightBrown.ToVector4();
                 for (int v = 0; v < earth.Length; v++)
                 {
                     var tile = v / 4;
                     earth[v].Position.Y -= Bp.FoundationAt(tile % quads, tile / quads) * 3;
-                    earth[v].GrassInfo.X = 1;
-                    earth[v].Color = brown;
                 }
                 EarthVertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), earth.Length, BufferUsage.None);
                 EarthVertexBuffer.SetData(earth);
@@ -602,8 +598,8 @@ namespace FSO.LotView.Components
             var floors = new HashSet<sbyte>();
             for (sbyte f = 0; f < world.Level; f++) floors.Add(f);
             //the basement (-1) is always drawn under the ground (which hides it, but for the holes over it); while it's
-            //shown, all above it is hidden, as above any floor shown: the ground floor too (the earth round the basement is
-            //drawn with it instead, see FloorLevel.EarthAround)
+            //shown, all above it is hidden, as above any floor shown: the ground floor too, leaving the basement on the void
+            //(see WorldStatic.DrawBg)
             floors.Add(-1);
             var pass = Effect.CurrentTechnique.Passes[(_3d) ? 2 : WorldConfig.Current.PassOffset];
             Bp.FloorGeom.DrawFloor(device, Effect, world.Zoom, world.Rotation, world.Rooms.RoomMaps, floors, pass, state: world, screenAlignUV: !nonIso, withCeilings: true);
@@ -738,7 +734,7 @@ namespace FSO.LotView.Components
                             new Vector4(0.0f, 0.0f, 0.0f, 0.8f);
                         if (world.Level == 0)
                         {
-                            //in the basement: the grid on its floor (a storey down) and on the earth round it, not the ground's above
+                            //in the basement: the grid on its floor (a storey down) and round it, not the ground's above
                             DrawBasementGrid(device, pass, grassScale, altOff, PrimitiveType.TriangleList);
                         }
                         else
@@ -783,7 +779,7 @@ namespace FSO.LotView.Components
         }
 
         /// <summary>
-        /// The grid while the basement's shown: on its floor and the earth round it, a storey down (from the unraised ground:
+        /// The grid while the basement's shown: on its floor and round it, a storey down (from the unraised ground:
         /// foundations are above, hidden). The ground's grid (all but the dug out tiles) and the basement's together.
         /// </summary>
         private void DrawBasementGrid(GraphicsDevice device, EffectPass pass, float grassScale, float altOff, PrimitiveType type)

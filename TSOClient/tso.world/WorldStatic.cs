@@ -101,6 +101,12 @@ namespace FSO.LotView
         public void DrawBg(GraphicsDevice gd, WorldState state, BoundingBox[] skyBounds, bool forceSurround)
         {
             state.PrepareCamera();
+            if (state.Level < 1 && !forceSurround)
+            {
+                //the basement's shown: all above it is hidden, and round it is the void, black, as The Sims 3 and 4 show it
+                gd.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, Color.Black, 1, 0);
+                return;
+            }
             if (forceSurround || (state.CameraMode == CameraRenderMode._3D && state.Cameras.ExternalTransitionActive()) || skyBounds?.Any(x => x.Intersects(state.Frustum)) != false)
             {
                 if (Dome == null) Dome = new SkyDomeComponent(gd, Bp);
