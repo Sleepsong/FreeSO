@@ -457,6 +457,9 @@ namespace FSO.LotView
             }
 
             WorldContent._2DWorldBatchEffect.MaxFloor = (float)Level-0.999f;
+            //2D sprites carry their own level, which the shift can't follow: while the basement's shown, all that's drawn
+            //is in it (above is hidden), so it's all moved to the basement's light (see LightMappedEffect.BasementLight)
+            WorldContent._2DWorldBatchEffect.BasementLight = Level < 1;
         }
 
         public void ClearLighting(bool indoors)

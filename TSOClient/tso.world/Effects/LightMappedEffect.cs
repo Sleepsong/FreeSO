@@ -72,9 +72,29 @@ namespace FSO.LotView.Effects
             }
         }
 
+        /// <summary>
+        /// For shaders that never go below the ground floor's cell (2D walls clamp their level at 0): the shift from the
+        /// ground floor's cell (0, 0) to the basement's, the last one, of the 3x2 map.
+        /// </summary>
+        public static readonly Vector2 BasementCellFromGround = new Vector2(2 / 3f, 1 / 2f);
+
+        private bool _BasementFromGround;
+        /// <summary>Whether what's drawn next finds its cell as the ground floor's when it's the basement's (see <see cref="BasementCellFromGround"/>).</summary>
+        public bool BasementLightFromGround
+        {
+            get { return _BasementFromGround; }
+            set
+            {
+                if (value == _BasementFromGround) return;
+                _BasementFromGround = value;
+                if (_BasementLight) ApplyLightOffset();
+            }
+        }
+
         private void ApplyLightOffset()
         {
-            pLightOffset?.SetValue(_BasementLight ? _LightOffset + BasementCellShift : _LightOffset);
+            var shift = _BasementLight ? (_BasementFromGround ? BasementCellFromGround : BasementCellShift) : Vector2.Zero;
+            pLightOffset?.SetValue(_LightOffset + shift);
         }
         public Vector2 MapLayout
         {

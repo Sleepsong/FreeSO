@@ -739,7 +739,8 @@ namespace FSO.SimAntics
                             //...but some have individual tiles as lit. in this case (# of tiles lit != number of tiles) we want to treat them as separate.
                             if ((flags2 & (VMEntityFlags2.ArchitectualWindow | VMEntityFlags2.ArchitectualDoor)) > 0) //definitely separate
                             {
-                                foreach (var subent in objs)
+                                //the basement's windows and doors look out onto earth: no daylight comes through them
+                                foreach (var subent in (info2.Room.Floor < 0) ? Enumerable.Empty<VMEntity>() : objs)
                                 {
                                     light.Lights.Add(new LotView.LMap.LightData(
                                         new Vector2(subent.Position.x, subent.Position.y), 

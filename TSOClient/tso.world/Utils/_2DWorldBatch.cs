@@ -612,6 +612,9 @@ namespace FSO.LotView.Utils
             if (group.Mask != null) effect.maskTexture = group.Mask;
 
             effect.SetTechnique(group.Technique);
+            //walls find their light's floor from their height, never below the ground floor's: the basement's are moved
+            //from that cell (see LightMappedEffect.BasementCellFromGround), the rest by their own level
+            effect.BasementLightFromGround = group.Technique == WorldBatchTechniques.drawZWall || group.Technique == WorldBatchTechniques.drawZWallDepthChannel;
             EffectPassCollection passes = effect.CurrentTechnique.Passes;
             
             EffectPass pass = passes[Math.Min(passes.Count - 1, WorldConfig.Current.DirPassOffset)];

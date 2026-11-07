@@ -825,6 +825,32 @@ namespace FSO.SimAntics.Utils
             new int[] {1,-1}
         };
 
+        /// <summary>
+        /// In the basement (level 0), the tiles where the earth's sides are, which cut away as walls do: the dug out tiles next
+        /// to earth, and the earth next to them (diagonally too). Null on other levels, or with nothing dug.
+        /// </summary>
+        public static bool[] EarthEdges(VMArchitecture target, sbyte floor)
+        {
+            var map = target.Terrain?.Basement;
+            if (floor != 0 || map == null || !map.Any) return null;
+            var result = new bool[target.Width * target.Height];
+            for (int y = 0; y < target.Height; y++)
+            {
+                for (int x = 0; x < target.Width; x++)
+                {
+                    var dug = map.IsDug(x, y);
+                    for (int dy = -1; dy <= 1 && !result[y * target.Width + x]; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                            if ((dx != 0 || dy != 0) && map.IsDug(x + dx, y + dy) != dug)
+                            {
+                                result[y * target.Width + x] = true;
+                                break;
+                            }
+                }
+            }
+            return result;
+        }
+
         public static bool[] GenerateRoomCut(VMArchitecture target, sbyte floor, WorldRotation dir, HashSet<uint> cutRooms)
         {
             var result = new bool[target.Width*target.Height];
@@ -834,6 +860,7 @@ namespace FSO.SimAntics.Utils
             var walls = target.Walls[floor - 1];
 
             var width = target.Width;
+            var earth = EarthEdges(target, floor);
 
             for (int y1=0;y1<target.Height; y1++)
             {
@@ -844,6 +871,7 @@ namespace FSO.SimAntics.Utils
                         && (offset + 1 < walls.Length && walls[offset + 1].Segments == 0)
                         && (offset - width > 0 && walls[offset - width].Segments == 0)
                         && (offset - 1 > 0 && walls[offset - 1].Segments == 0)
+                        && (earth == null || !earth[offset])
                         )
                     {
                         offset++;
@@ -885,6 +913,7 @@ namespace FSO.SimAntics.Utils
         {
             var walls = target.Walls[floor - 1];
             var width = target.Width;
+            var earth = EarthEdges(target, floor);
             bool change = false;
             for (int x = rect.Left; x < rect.Right; x++)
             {
@@ -897,6 +926,7 @@ namespace FSO.SimAntics.Utils
                         && (offset + 1 < walls.Length && walls[offset + 1].Segments == 0)
                         && (offset - width > 0 && walls[offset - width].Segments == 0)
                         && (offset - 1 > 0 && walls[offset - 1].Segments == 0)
+                        && (earth == null || !earth[offset])
                         ) continue;
 
                     if (!cuts[offset])
