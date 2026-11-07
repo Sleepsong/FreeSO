@@ -116,7 +116,7 @@ namespace FSO.Client
 
             { "ComplexShaders", "false" },
             { "GlobalGraphicsMode", "0" }, //2d, 2d hybrid, 3d
-            { "LivePIP", "true" }, //Simitone, 3D: event popups show a live view of what they're about (TS1's Live Picture in Picture)
+            { "LivePIP", "true" }, //Simitone, 3D: TS1's Picture in Picture, a window in the corner showing events live
             { "EnableTransitions", "true" },
 
             { "ArchiveServerGUID", "" },
