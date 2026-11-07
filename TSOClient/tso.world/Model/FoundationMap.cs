@@ -223,9 +223,25 @@ namespace FSO.LotView.Model
 
         /// <summary>
         /// Whether a foundation tile has a side there (that can be painted): it drops to lower ground or a lower
-        /// foundation. Steps up to it stand in front of it (plain steps cover it; see Modelled3DFoundation.Capped).
+        /// foundation, or the tile beside is a column deck, open underneath, so its side shows under that deck. Steps up
+        /// to it stand in front of it (plain steps cover it; see Modelled3DFoundation.Capped).
         /// </summary>
-        public bool SideShows(int x, int y, int dir) => SideDrop(x, y, dir) > 0;
+        public bool SideShows(int x, int y, int dir) => SideDrop(x, y, dir) > 0 || UnderOpenDeck(x, y, dir);
+
+        /// <summary>Whether the tile beside (a column deck, open underneath) leaves this one's side to be seen under it.</summary>
+        public bool UnderOpenDeck(int x, int y, int dir)
+        {
+            if (RaiseOf(x, y) <= 0 || KindOf(x, y) == FoundationKind.ColumnDeck) return false;
+            var d = Directions[dir];
+            return RaiseOf(x + d.X, y + d.Y) > 0 && KindOf(x + d.X, y + d.Y) == FoundationKind.ColumnDeck;
+        }
+
+        /// <summary>Where a tile's side starts (raise units): the ground under an open deck, else the lower tile's top.</summary>
+        public short SideBottom(int x, int y, int dir)
+        {
+            if (UnderOpenDeck(x, y, dir)) return 0;
+            return (short)(RaiseOf(x, y) - SideDrop(x, y, dir));
+        }
 
         /// <summary>Whether steps lead up to a tile's side (the steps' tile is beside it, rising toward it).</summary>
         public bool StepsUpTo(int x, int y, int dir)

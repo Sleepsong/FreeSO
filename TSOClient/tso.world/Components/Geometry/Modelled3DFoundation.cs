@@ -239,7 +239,7 @@ namespace FSO.LotView.Components.Geometry
                 // the side under the band: the foundation's covering, or the lattice
                 if (kind != FoundationKind.ColumnDeck)
                 {
-                    var bottom = (map.RaiseOf(x, y) - map.SideDrop(x, y, dir)) * Bp.TerrainFactor;
+                    var bottom = map.SideBottom(x, y, dir) * Bp.TerrainFactor;
                     if (underBand > bottom)
                     {
                         if (deck)
@@ -256,12 +256,16 @@ namespace FSO.LotView.Components.Geometry
                     }
                 }
 
-                // a deck's board, flush with its side
-                if (deck)
+                // a deck's board, flush with its side (not where a column deck as high carries on: it's inside that deck)
+                if (deck && map.SideDrop(x, y, dir) > 0)
+                {
+                    var along = FoundationLook.PlanksAlongU();
+                    Func<float, float, Vector2> uv = (u, h) => along ? new Vector2(u, -h) : new Vector2(-h, u); //one plank, lengthways
                     sink(FoundationMaterial.Planks, 0,
                         new Vector3(a.X, ga + underBand, a.Y), new Vector3(b.X, gb + underBand, b.Y),
                         new Vector3(b.X, gb + raise, b.Y), new Vector3(a.X, ga + raise, a.Y), normal,
-                        new Vector2(ua, -underBand), new Vector2(ub, -underBand), new Vector2(ub, -raise), new Vector2(ua, -raise));
+                        uv(ua, underBand), uv(ub, underBand), uv(ub, raise), uv(ua, raise));
+                }
             }
         }
 
