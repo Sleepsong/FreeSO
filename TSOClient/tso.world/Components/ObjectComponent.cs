@@ -588,7 +588,7 @@ namespace FSO.LotView.Components
         public void DrawLMap(GraphicsDevice device, sbyte level)
         {
             //#if !DEBUG 
-            if (!Visible || (Position.X < -2043 && Position.Y < -2043) || Level < 1) return;
+            if (!Visible || (Position.X < -2043 && Position.Y < -2043) || Level < 0) return; //(level 0 is the basement)
             //#endif
             dgrp.World = World3D;
             if (this.DrawGroup != null)

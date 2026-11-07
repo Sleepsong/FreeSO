@@ -37,12 +37,44 @@ namespace FSO.LotView.Effects
                 pWorldToLightFactor.SetValue(value);
             }
         }
+        private Vector2 _LightOffset;
         public Vector2 LightOffset
         {
+            get { return _LightOffset; }
             set
             {
-                pLightOffset.SetValue(value);
+                _LightOffset = value;
+                ApplyLightOffset();
             }
+        }
+
+        /// <summary>
+        /// The light map's cells go floor by floor (see MapLayout), and the shaders find a floor's cell from Level: for the
+        /// basement (level 0, Level below 0) that's the cell at (-1, -1), off the map. Moving the light offset on by a whole
+        /// map in each direction takes it to the last cell instead, which no floor uses (6 cells, 5 floors): the basement's.
+        /// </summary>
+        public static readonly Vector2 BasementCellShift = new Vector2(1, 1);
+
+        private bool _BasementLight;
+        /// <summary>
+        /// Whether what's drawn next is in the basement, so takes its light from the basement's cell of the light map.
+        /// Setting <see cref="Level"/> sets this (a level below 0 is the basement); draws that work out their own level from
+        /// the height (walls) set it themselves afterwards.
+        /// </summary>
+        public bool BasementLight
+        {
+            get { return _BasementLight; }
+            set
+            {
+                if (value == _BasementLight) return;
+                _BasementLight = value;
+                ApplyLightOffset();
+            }
+        }
+
+        private void ApplyLightOffset()
+        {
+            pLightOffset?.SetValue(_BasementLight ? _LightOffset + BasementCellShift : _LightOffset);
         }
         public Vector2 MapLayout
         {
@@ -62,6 +94,7 @@ namespace FSO.LotView.Effects
                     _CurrentLevel = value;
                     pLevel.SetValue(value);
                 }
+                BasementLight = value < 0;
             }
         }
 

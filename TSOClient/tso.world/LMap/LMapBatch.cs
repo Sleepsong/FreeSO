@@ -33,7 +33,8 @@ namespace FSO.LotView.LMap
         public RenderTarget2D OutsideShadowTarg;
         public RenderTarget2D OutsideShadowTargPost;
         private SpriteBatch ShadowTargBlit;
-        private int OutShadowFloor = -1;
+        private const int NoOutShadowFloor = int.MinValue; //(-1 is the basement)
+        private int OutShadowFloor = NoOutShadowFloor;
 
         public RenderTarget2D LightMap;
         public RenderTarget2D LightMapDirection;
@@ -59,7 +60,7 @@ namespace FSO.LotView.LMap
         public Vector2 InvMapLayout;
 
         private List<DirtyRoom> DirtyRooms = new List<DirtyRoom>();
-        public sbyte RedrawFloor;
+        public sbyte RedrawFloor = -1; //the floors drawn so far, by level - 1: -1 for none (and the basement, -1, counts)
         public Color LastOutsideColor;
 
         private Point ScissorBase;
@@ -127,11 +128,17 @@ namespace FSO.LotView.LMap
             var height = (int)MapLayout.Y;
             var x = floor % width;
             var y = floor / width;
+            if (floor < 0)
+            {
+                //the basement: the last cell, which no floor uses (see LightMappedEffect.BasementCellShift)
+                x = width - 1;
+                y = height - 1;
+            }
             //var floorWidth = 75 * 16;
             //var floorHeight = 75 * 16;
 
             LightEffect.UVBase = new Vector2(x, y);
-            LightEffect.roomMap = state.Rooms.RoomMaps[floor];
+            LightEffect.roomMap = state.Rooms.ForFloor(floor);
 
             var res = (Blueprint.Width - borderSize) * resPerTile;
             ScissorBase = new Point(res * x, res * y);
@@ -235,7 +242,7 @@ namespace FSO.LotView.LMap
                 return;
             }
 
-            OutShadowFloor = -1;
+            OutShadowFloor = NoOutShadowFloor;
             var rooms = Blueprint.Rooms;
             var lightRooms = Blueprint.Light;
             for (int i = 0; i < rooms.Count; i++)
@@ -290,8 +297,7 @@ namespace FSO.LotView.LMap
             foreach (var rm in ordered)
             {
                 var room = rooms[rm.RoomID];
-                //(the basement's rooms, floor -1, have no light maps yet)
-                if (room.WallLines == null || room.Floor > floorLimit || room.Floor < 0)
+                if (room.WallLines == null || room.Floor > floorLimit)
                 {
                     DirtyRooms.Remove(rm);
                     continue;
@@ -326,12 +332,12 @@ namespace FSO.LotView.LMap
         public void InvalidateAll()
         {
             LastOutsideColor = Blueprint.OutsideColor;
-            RedrawFloor = 0;
+            RedrawFloor = -1; //(so it's all drawn again even while the basement, floor -1, is shown)
         }
 
         public void RedrawAll(WorldState state, int floorLimit)
         {
-            OutShadowFloor = -1;
+            OutShadowFloor = NoOutShadowFloor;
             DirtyRooms.Clear();
             sbyte floor = 0;
             SetFloor(floor, state);
@@ -350,7 +356,7 @@ namespace FSO.LotView.LMap
             for (int i = 0; i < rooms.Count; i++)
             {
                 var room = rooms[i];
-                if (room.WallLines == null || room.Floor > floorLimit || room.Floor < 0) continue; //(not the basement's yet)
+                if (room.WallLines == null || room.Floor > floorLimit) continue;
                 if (room.Floor != floor)
                 {
                     floor = room.Floor;
@@ -497,7 +503,9 @@ namespace FSO.LotView.LMap
             var colorTech = 0; //
             var dirTech = 1; //
 
-            if (room.IsOutside || WallComp != null)
+            //the basement's earth (its "outside" room) is underground: no sun on it
+            var earth = room.Floor < 0 && room.IsOutside;
+            if ((room.IsOutside || WallComp != null) && !earth)
             {
                 var res = (Blueprint.Width - borderSize) * resPerTile;
                 if (!room.IsOutside)
