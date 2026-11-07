@@ -155,9 +155,13 @@ namespace FSO.LotView
                         op.Draw(gd, state);
                 }
 
-                foreach (var p in Blueprint.Particles)
+                //the weather: not while the basement's shown (all above it is hidden, round it is the void)
+                if (state.Level >= 1)
                 {
-                    p.Draw(gd, state);
+                    foreach (var p in Blueprint.Particles)
+                    {
+                        p.Draw(gd, state);
+                    }
                 }
             }
 

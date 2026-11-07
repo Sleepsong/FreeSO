@@ -653,7 +653,8 @@ namespace FSO.LotView
             BoundView();
             State._2D.PreciseZoom = State.PreciseZoom;
             State.OutsideColor = Blueprint.OutsideColor;
-            FSO.Common.Rendering.Framework.GameScreen.ClearColor = new Color(new Color(0x72, 0x72, 0x72).ToVector4() * State.OutsideColor.ToVector4());
+            FSO.Common.Rendering.Framework.GameScreen.ClearColor = (State.Level < 1) ? Color.Black //(the basement's shown: round it is the void, see WorldStatic.DrawBg)
+                : new Color(new Color(0x72, 0x72, 0x72).ToVector4() * State.OutsideColor.ToVector4());
             foreach (var sub in Blueprint.SubWorlds) sub.PreDraw(device, State);
             State.UpdateInterpolation();
             if (Blueprint != null)
