@@ -119,8 +119,8 @@ namespace FSO.LotView.Components
             var wallContent = Content.Content.Get().WorldWalls;
             var floorContent = Content.Content.Get().WorldFloors;
 
-            //draw walls
-            for (sbyte level = 1; level <= world.Level; level++)
+            //draw walls: the basement (level 0) and up
+            for (sbyte level = 0; level <= world.Level; level++)
             {
                 int off = 0;
                 Level = level;

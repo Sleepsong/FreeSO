@@ -42,6 +42,12 @@ namespace FSO.LotView.Components
         /// own ground (grass, sand, whatever it is) is drawn there from these. Null when there's nothing like that.
         /// </summary>
         public VertexBuffer GroundVertexBuffer;
+        /// <summary>
+        /// The lot's ground as the earth round the basement, seen while the basement's shown (with all above it hidden): unraised,
+        /// and all the dead-grass brown the ground has where grass has died (the game's own dirt). Drawn a storey down, by the
+        /// basement's floor (see FloorLevel.EarthAround), with the grid on it in build mode.
+        /// </summary>
+        public VertexBuffer EarthVertexBuffer;
         public float Alpha = 1f;
 
         private TerrainType LightType = TerrainType.GRASS;
@@ -224,6 +230,8 @@ namespace FSO.LotView.Components
             }
             GroundVertexBuffer?.Dispose();
             GroundVertexBuffer = null;
+            EarthVertexBuffer?.Dispose();
+            EarthVertexBuffer = null;
 
             /** Convert rectangle to world units **/
             var quads = Size.Width;
@@ -307,6 +315,21 @@ namespace FSO.LotView.Components
                 }
                 GroundVertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), ground.Length, BufferUsage.None);
                 GroundVertexBuffer.SetData(ground);
+            }
+
+            {
+                // the earth round the basement: the same ground, unraised, all brown
+                var earth = (TerrainParallaxVertex[])Geom.Clone();
+                var brown = LightBrown.ToVector4();
+                for (int v = 0; v < earth.Length; v++)
+                {
+                    var tile = v / 4;
+                    earth[v].Position.Y -= Bp.FoundationAt(tile % quads, tile / quads) * 3;
+                    earth[v].GrassInfo.X = 1;
+                    earth[v].Color = brown;
+                }
+                EarthVertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), earth.Length, BufferUsage.None);
+                EarthVertexBuffer.SetData(earth);
             }
 
             IndexBuffer = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, sizeof(int) * Indexes.Length, BufferUsage.None);
@@ -579,9 +602,9 @@ namespace FSO.LotView.Components
             var floors = new HashSet<sbyte>();
             for (sbyte f = 0; f < world.Level; f++) floors.Add(f);
             //the basement (-1) is always drawn under the ground (which hides it, but for the holes over it); while it's
-            //shown, the ground floor is too, without the floor over the basement (DrawFloor leaves its ceiling out)
+            //shown, all above it is hidden, as above any floor shown: the ground floor too (the earth round the basement is
+            //drawn with it instead, see FloorLevel.EarthAround)
             floors.Add(-1);
-            floors.Add(0);
             var pass = Effect.CurrentTechnique.Passes[(_3d) ? 2 : WorldConfig.Current.PassOffset];
             Bp.FloorGeom.DrawFloor(device, Effect, world.Zoom, world.Rotation, world.Rooms.RoomMaps, floors, pass, state: world, screenAlignUV: !nonIso, withCeilings: true);
             Effect.GrassShininess = 0.02f;// (float)0.25);
@@ -624,6 +647,7 @@ namespace FSO.LotView.Components
                 Effect.RoomMap = world.Rooms.RoomMaps[0];
                 Effect.SetTechnique(GrassTechniques.DrawBlades);
                 int grassNum = (int)Math.Ceiling(GrassHeight / (float)grassScale);
+                if (world.Level < 1) grassNum = 0; //(the basement's shown: the ground and its grass are hidden)
                 
                 RenderTargetBinding[] rts = null;
                 if (FSOEnvironment.UseMRT)
@@ -714,14 +738,8 @@ namespace FSO.LotView.Components
                             new Vector4(0.0f, 0.0f, 0.0f, 0.8f);
                         if (world.Level == 0)
                         {
-                            //in the basement: its grid, on its floor (a storey down), and not the ground's above it
-                            if (BasementGridPrimitives > 0)
-                            {
-                                Effect.World = Matrix.Identity * Matrix.CreateTranslation(0, (18 / 522f) * grassScale - altOff - 2.95f * 3, 0);
-                                device.Indices = BasementGridIndexBuffer;
-                                pass.Apply();
-                                device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, BasementGridPrimitives);
-                            }
+                            //in the basement: the grid on its floor (a storey down) and on the earth round it, not the ground's above
+                            DrawBasementGrid(device, pass, grassScale, altOff, PrimitiveType.TriangleList);
                         }
                         else
                         {
@@ -743,10 +761,14 @@ namespace FSO.LotView.Components
                         }
 
                         Effect.DiffuseColor = new Vector4(0, 0, 0, 1.0f);
-                        device.Indices = GridIndexBuffer;
                         pass = Effect.CurrentTechnique.Passes[(_3d) ? 1 : 0];
-                        pass.Apply();
-                        device.DrawIndexedPrimitives(PrimitiveType.LineList, 0, 0, GridPrimitives);
+                        if (world.Level == 0) DrawBasementGrid(device, pass, grassScale, altOff, PrimitiveType.LineList);
+                        else
+                        {
+                            device.Indices = GridIndexBuffer;
+                            pass.Apply();
+                            device.DrawIndexedPrimitives(PrimitiveType.LineList, 0, 0, GridPrimitives);
+                        }
                     }
 
 
@@ -758,6 +780,29 @@ namespace FSO.LotView.Components
                     }
                 }
             });
+        }
+
+        /// <summary>
+        /// The grid while the basement's shown: on its floor and the earth round it, a storey down (from the unraised ground:
+        /// foundations are above, hidden). The ground's grid (all but the dug out tiles) and the basement's together.
+        /// </summary>
+        private void DrawBasementGrid(GraphicsDevice device, EffectPass pass, float grassScale, float altOff, PrimitiveType type)
+        {
+            Effect.World = Matrix.Identity * Matrix.CreateTranslation(0, (18 / 522f) * grassScale - altOff - 2.95f * 3, 0);
+            if (EarthVertexBuffer != null) device.SetVertexBuffer(EarthVertexBuffer);
+            if (GridPrimitives > 0 && GridIndexBuffer != null)
+            {
+                device.Indices = GridIndexBuffer;
+                pass.Apply();
+                device.DrawIndexedPrimitives(type, 0, 0, GridPrimitives);
+            }
+            if (BasementGridPrimitives > 0 && BasementGridIndexBuffer != null)
+            {
+                device.Indices = BasementGridIndexBuffer;
+                pass.Apply();
+                device.DrawIndexedPrimitives(type, 0, 0, BasementGridPrimitives);
+            }
+            device.SetVertexBuffer(VertexBuffer);
         }
 
         public void DrawLMap(GraphicsDevice gd, LightData light, Matrix projection, Matrix lightTransform)
@@ -972,6 +1017,7 @@ namespace FSO.LotView.Components
                 GridIndexBuffer?.Dispose();
                 TGridIndexBuffer?.Dispose();
                 BasementGridIndexBuffer?.Dispose();
+                EarthVertexBuffer?.Dispose();
                 GridTex?.Dispose();
             }
             GroundVertexBuffer?.Dispose();
