@@ -109,8 +109,17 @@ namespace FSO.LotView.Components
         {
             var map = Bp.Foundations;
             if (map == null || !map.Any) return false;
-            if (map.Steps[index] != 0 && map.StepTop(index % map.Width, index / map.Width) > 0) return true;
+            //plain steps are drawn over the whole tile; a staircase's piece stands on the ground like any object
+            if (map.Steps[index] != 0 && map.StepTop(index % map.Width, index / map.Width) > 0)
+                return FoundationLook.StairFor(map.StepStyle[index]) == null;
             return pattern == 0 && map.Raise[index] > 0;
+        }
+
+        /// <summary>Whether a ground floor tile is under a column deck: open, with the lot's ground to be seen under it.</summary>
+        private bool UnderOpenDeck(int index)
+        {
+            var map = Bp.Foundations;
+            return map != null && map.Any && map.Raise[index] > 0 && map.Kind[index] == (byte)FoundationKind.ColumnDeck;
         }
 
         /// <summary>The foundations' and decks' models: one per material, and per covering on foundations' sides.</summary>
@@ -118,6 +127,11 @@ namespace FSO.LotView.Components
         {
             foreach (var (material, pattern) in Modelled3DFoundation.Groups(Bp.Foundations))
                 lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, material, pattern));
+            // the lot's own ground under column decks, from the unraised ground (TerrainComponent.GroundVertexBuffer)
+            var map = Bp.Foundations;
+            if (map != null && map.Any)
+                for (int j = 0; j < map.Raise.Length; j++)
+                    if (UnderOpenDeck(j)) lvl.GroundUnderDecks.AddIndex((ushort)j);
         }
 
         public void SliceReset(GraphicsDevice gd, Rectangle slice)
@@ -547,6 +561,22 @@ namespace FSO.LotView.Components
                     }
                 }
 
+                // the ground under column decks: drawn as the lot's ground (as tile 0 is, above), unraised
+                var groundVB = Bp.Terrain?.GroundVertexBuffer;
+                if (floor.GroundUnderDecks.GPUData != null && floor.GroundUnderDecks.GeomForOffset.Count > 0 && groundVB != null)
+                {
+                    e.UseTexture = false;
+                    e.IgnoreColor = false;
+                    e.GrassShininess = 0.02f;
+                    gd.SetVertexBuffer(groundVB);
+                    gd.Indices = floor.GroundUnderDecks.GPUData;
+                    pass.Apply();
+                    gd.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, floor.GroundUnderDecks.GeomForOffset.Count * 2);
+                    gd.SetVertexBuffer(Bp.Terrain.VertexBuffer);
+                    e.UseTexture = true;
+                    e.IgnoreColor = true;
+                }
+
                 // foundations: their sides, bare tops and steps, with the ground floor
                 foreach (var fnd in floor.FoundationGroups)
                 {
@@ -657,6 +687,8 @@ namespace FSO.LotView.Components
         public Dictionary<ushort, FloorTileGroup> GroupForTileType = new Dictionary<ushort, FloorTileGroup>();
         /// <summary>The foundations' models (ground floor only), one per wall covering.</summary>
         public List<Modelled3DFoundation> FoundationGroups = new List<Modelled3DFoundation>();
+        /// <summary>Ground tiles under column decks, drawn as the lot's ground from the unraised ground's vertices.</summary>
+        public FloorTileGroup GroundUnderDecks = new FloorTileGroup();
         public ushort[] Tiles;
         private Blueprint Bp;
 
@@ -715,6 +747,7 @@ namespace FSO.LotView.Components
                 group.Value.PrepareGPU(gd);
             }
             foreach (var group in FoundationGroups) group.PrepareGPU(gd);
+            if (GroundUnderDecks.GeomForOffset.Count > 0) GroundUnderDecks.PrepareGPU(gd);
 
             Bp.SM64?.UpdateFloors();
         }
@@ -724,6 +757,7 @@ namespace FSO.LotView.Components
             Dispose();
             GroupForTileType.Clear();
             FoundationGroups.Clear();
+            GroundUnderDecks = new FloorTileGroup();
         }
 
         public void Dispose()
@@ -733,6 +767,7 @@ namespace FSO.LotView.Components
                 group.Value.Dispose();
             }
             foreach (var group in FoundationGroups) group.Dispose();
+            GroundUnderDecks.Dispose();
         }
     }
 

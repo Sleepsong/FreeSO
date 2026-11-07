@@ -35,6 +35,11 @@ namespace FSO.LotView.Components
         private IndexBuffer GridIndexBuffer;
         private IndexBuffer TGridIndexBuffer;
         public VertexBuffer VertexBuffer;
+        /// <summary>
+        /// The ground without foundations raising it, where something open stands over it (a column deck): the lot's
+        /// own ground (grass, sand, whatever it is) is drawn there from these. Null when there's nothing like that.
+        /// </summary>
+        public VertexBuffer GroundVertexBuffer;
         public float Alpha = 1f;
 
         private TerrainType LightType = TerrainType.GRASS;
@@ -212,6 +217,8 @@ namespace FSO.LotView.Components
                 GridIndexBuffer?.Dispose();
                 TGridIndexBuffer?.Dispose();
             }
+            GroundVertexBuffer?.Dispose();
+            GroundVertexBuffer = null;
 
             /** Convert rectangle to world units **/
             var quads = Size.Width;
@@ -274,6 +281,23 @@ namespace FSO.LotView.Components
 
             VertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), Geom.Length, BufferUsage.None);
             VertexBuffer.SetData(Geom);
+
+            if (HasOpenFoundations())
+            {
+                // the same ground, unraised: copies of the raised tiles brought back down to it
+                var ground = (TerrainParallaxVertex[])Geom.Clone();
+                for (var y = 0; y < quads; y++)
+                {
+                    for (var x = 0; x < quads; x++)
+                    {
+                        var raise = Bp.FoundationAt(x, y) * 3;
+                        if (raise == 0) continue;
+                        for (int v = 0; v < 4; v++) ground[(y * quads + x) * 4 + v].Position.Y -= raise;
+                    }
+                }
+                GroundVertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), ground.Length, BufferUsage.None);
+                GroundVertexBuffer.SetData(ground);
+            }
 
             IndexBuffer = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, sizeof(int) * Indexes.Length, BufferUsage.None);
             IndexBuffer.SetData(Indexes);
@@ -852,6 +876,16 @@ namespace FSO.LotView.Components
             }
         }
 
+        /// <summary>Whether any foundation leaves the ground under it to be seen (a column deck).</summary>
+        private bool HasOpenFoundations()
+        {
+            var map = Bp.Foundations;
+            if (map == null || !map.Any) return false;
+            for (int i = 0; i < map.Raise.Length; i++)
+                if (map.Raise[i] > 0 && map.Kind[i] == (byte)FoundationKind.ColumnDeck) return true;
+            return false;
+        }
+
         public void Dispose()
         {
             if (VertexBuffer != null)
@@ -862,6 +896,7 @@ namespace FSO.LotView.Components
                 TGridIndexBuffer?.Dispose();
                 GridTex?.Dispose();
             }
+            GroundVertexBuffer?.Dispose();
         }
     }
 }
