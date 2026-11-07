@@ -1098,6 +1098,8 @@ namespace FSO.SimAntics
         TSOTimeout,
         TS1LotChange,
         TS1BuildBuyChange,
-        TSOUpgraded
+        TSOUpgraded,
+        /// <summary>Something to watch has started on the lot (a fire): data is what to look at, for the frontend's picture in picture.</summary>
+        TS1PictureInPicture
     }
 }

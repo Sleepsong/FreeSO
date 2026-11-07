@@ -83,6 +83,8 @@ namespace FSO.SimAntics.Primitives
                 {
                     madeAFire = true;
                     var fire = context.VM.Context.CreateObjectInstance(FIRE_GUID, LotTilePos.FromBigTile(pos.TileX, pos.TileY, pos.Level), Direction.NORTH);
+                    //a fire's started (not spread from one): worth a picture in picture, as TS1 shows one
+                    if (fire?.BaseObject != null) context.VM.SignalGenericVMEvt(VMEventType.TS1PictureInPicture, fire.BaseObject);
                 }
                 first = false;
 
