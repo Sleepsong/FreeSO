@@ -939,7 +939,7 @@ namespace FSO.LotView.Components
             s.M23 = 1;
             s.M32 = 1;
 
-            for (int i = light.Level; i < Drawgroups.Length; i++)
+            for (int i = Math.Max(0, (int)light.Level); i < Drawgroups.Length; i++) //(the basement's light, level -1, has no roofs of its own)
             {
                 Effect.Level = (float)i + 1;
                 if (Drawgroups[i] != null)

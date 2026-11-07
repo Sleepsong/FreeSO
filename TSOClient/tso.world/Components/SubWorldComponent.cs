@@ -182,7 +182,7 @@ namespace FSO.LotView.Components
                         //TicksSinceLight = 0;
                         break;
                     case BlueprintDamageType.ROOM_CHANGED:
-                        for (sbyte i = 0; i < Blueprint.RoomMap.Length; i++)
+                        for (sbyte i = LevelArray<int>.MinIndex; i < Blueprint.RoomMap.Length; i++) //the basement (-1) and up
                         {
                             State.Rooms.SetRoomMap(i, Blueprint.RoomMap[i]);
                         }

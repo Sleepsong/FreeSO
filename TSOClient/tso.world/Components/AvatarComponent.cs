@@ -107,7 +107,7 @@ namespace FSO.LotView.Components
             set
             {
                 _Position = value;
-                ALevel = (int)(value.Z / 2.94f);
+                ALevel = (int)Math.Floor(value.Z / 2.94f + 0.01f); //(rounded down: the basement, below 0, is -1)
                 if (blueprint != null)
                 {
                     AltitudeNormal = blueprint.InterpNormal(_Position);
@@ -209,6 +209,7 @@ namespace FSO.LotView.Components
             {
                 effect.Parameters["ObjectID"].SetValue(ObjectID / 65535f);
                 effect.Parameters["Level"].SetValue(ALevel + 0.0001f);
+                effect.BasementLight = ALevel < 0;
                 var roomLights = blueprint?.RoomColors;
                 if (roomLights != null)
                 {

@@ -229,10 +229,12 @@ namespace FSO.LotView.Components
                 }
                 LastPosition = transp;
                 effect.Parameters["Level"].SetValue((float)(Math.Min((world.Level + 1), Bp.Stories) - 0.999f));
+                effect.BasementLight = false;
             } else
             {
                 effect.Parameters["World"].SetValue(OwnerWorld);// Matrix.CreateScale(3,3,3));
                 effect.Parameters["Level"].SetValue(Level-0.999f);
+                effect.BasementLight = Level < 1; //(the basement, level 0)
             }
 
             effect.Parameters["View"].SetValue(world.View);
@@ -301,6 +303,7 @@ namespace FSO.LotView.Components
                 effect.Parameters["SubColor"].SetValue(Vector4.Zero);
             }
             effect.Parameters["Level"].SetValue((float)((5 + 1) - 0.999f));
+            effect.BasementLight = false;
             effect.Parameters["ClipLevel"].SetValue(float.MaxValue);
             effect.Parameters["BaseAlt"].SetValue(basealt * 3);
             effect.Parameters["BpSize"].SetValue(new Vector2(3, 3));

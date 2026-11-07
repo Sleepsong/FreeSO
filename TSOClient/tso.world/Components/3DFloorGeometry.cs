@@ -417,8 +417,8 @@ namespace FSO.LotView.Components
                 }
                 
                 e.World = worldmat;
-                e.Level = (float)(f-((lightWorld == null)?0.999f:1f));
-                if (roommaps != null) e.RoomMap = roommaps[Math.Max(0, f-1)]; //(the basement has no room map of its own yet)
+                e.Level = (float)(f-((lightWorld == null)?0.999f:1f)); //(the basement's, below 0, takes the basement's light)
+                if (roommaps != null) e.RoomMap = roommaps[LMap.GPURoomMaps.Slot(f-1)];
                 foreach (var type in floor.GroupForTileType)
                 {
                     bool water = false;
@@ -646,6 +646,11 @@ namespace FSO.LotView.Components
                 }
 
                 // foundations: their sides, bare tops and steps, with the ground floor
+                // (the earth's sides round the basement stand on its rooms' edges, as walls do: like walls, they take their
+                // light from just in front of them, not half from the earth behind)
+                var earthSides = fi == LevelArray<int>.MinIndex && lightWorld == null && floor.FoundationGroups.Count > 0;
+                var floorOffset = e.LightOffset;
+                if (earthSides) e.LightOffset = WorldContent.RCObject.LightOffset;
                 foreach (var fnd in floor.FoundationGroups)
                 {
                     if (fnd.PrimitiveCount == 0 || fnd.GPUData == null) continue;
@@ -669,8 +674,10 @@ namespace FSO.LotView.Components
                     e.ScreenAlignUV = screenAlignUV;
                     e.Bias = -999;
                 }
+                if (earthSides) e.LightOffset = floorOffset;
             }
             e.Water = false;
+            e.BasementLight = false; //(back to the ground's light for whatever's drawn after)
             Alt = !Alt;
 
             gd.RasterizerState = baseRS;

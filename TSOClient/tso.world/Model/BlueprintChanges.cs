@@ -158,7 +158,7 @@ namespace FSO.LotView
                     }
                     if ((Dirty & BlueprintGlobalChanges.ROOM_CHANGED) > 0)
                     {
-                        for (sbyte i = 0; i < Blueprint.RoomMap.Length; i++)
+                        for (sbyte i = LevelArray<int>.MinIndex; i < Blueprint.RoomMap.Length; i++) //the basement (-1) and up
                         {
                             state.Rooms.SetRoomMap(i, Blueprint.RoomMap[i]);
                         }

@@ -379,6 +379,7 @@ namespace FSO.LotView.RC
             for (int i = -1; i < state.Level; i++)
             {
                 var grp = (i == -1) ? BasementGroups : GroupsByTexture[i];
+                effect.BasementLight = (i == -1); //(walls find their floor's light by their height: the basement's is moved)
                 foreach (var g in grp.Values)
                 {
                     if (g.PrimCount == 0) continue;
@@ -400,6 +401,7 @@ namespace FSO.LotView.RC
                     }
                 }
             }
+            effect.BasementLight = false;
             if (!gd.RasterizerState.ScissorTestEnable) gd.RasterizerState = RasterizerState.CullNone;
         }
 
@@ -439,9 +441,10 @@ namespace FSO.LotView.RC
             effect.ViewProjection = projection;
 
             //dont care about base texture or offset here.
+            //(the basement's light, level -1, starts with the basement's walls)
             for (int i = light.Level; i < GroupsByTexture.Count; i++)
             {
-                var grp = GroupsByTexture[i];
+                var grp = (i < 0) ? BasementGroups : GroupsByTexture[i];
                 foreach (var g in grp.Values)
                 {
                     if (g.PrimCount == 0) continue;
