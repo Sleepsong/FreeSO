@@ -226,15 +226,15 @@ namespace FSO.LotView.Components.Geometry
                     var wall = LatticeCovering();
                     if (wall != 0) return WallTexture(state, wall);
                     if (GeneratedLattice == null || GeneratedLattice.IsDisposed)
-                        GeneratedLattice = MakeLattice(gd, FloorTexture(state, TrimFloor()) ?? FloorTexture(state, DeckFloor()));
+                        GeneratedLattice = MakeLattice(gd, FloorTexture(state, DeckFloor()) ?? FloorTexture(state, TrimFloor()));
                     return GeneratedLattice;
             }
             return null;
         }
 
         /// <summary>
-        /// Lattice made from a wood texture of the game's: strips of it crossing diagonally (four each way to a tile),
-        /// with the dark under the deck showing between them.
+        /// Lattice made from a wood texture of the game's (the deck's own planks, so it matches): strips of it crossing
+        /// diagonally (four each way to a tile), with the dark under the deck showing between them.
         /// </summary>
         public static Texture2D MakeLattice(GraphicsDevice gd, Texture2D wood)
         {
@@ -276,6 +276,44 @@ namespace FSO.LotView.Components.Geometry
         }
 
         private static float Mod(float a, float m) => ((a % m) + m) % m;
+
+        private static bool? AlongU;
+
+        /// <summary>
+        /// Whether the deck planks' picture has its planks running across it (along u): colour changes more from row to
+        /// row than along a row. A deck's board takes one plank lengthways either way.
+        /// </summary>
+        public static bool PlanksAlongU()
+        {
+            if (AlongU != null) return AlongU.Value;
+            bool result = true;
+            try
+            {
+                var near = Content.Content.Get().WorldFloors.Get(DeckFloor())?.Near;
+                if (near != null && near.Frames.Length > 0)
+                {
+                    var frame = near.Frames[0];
+                    frame.DecodeIfRequired(false);
+                    var px = frame.PixelData;
+                    int w = frame.Width, h = frame.Height;
+                    if (px != null && px.Length >= w * h && w > 1 && h > 1)
+                    {
+                        double alongRows = 0, acrossRows = 0;
+                        Func<Color, Color, int> diff = (c1, c2) => Math.Abs(c1.R - c2.R) + Math.Abs(c1.G - c2.G) + Math.Abs(c1.B - c2.B);
+                        for (int y = 0; y < h - 1; y++)
+                            for (int x = 0; x < w - 1; x++)
+                            {
+                                alongRows += diff(px[y * w + x], px[y * w + x + 1]);
+                                acrossRows += diff(px[y * w + x], px[(y + 1) * w + x]);
+                            }
+                        result = acrossRows >= alongRows;
+                    }
+                }
+            }
+            catch (Exception) { result = true; }
+            AlongU = result;
+            return result;
+        }
 
         /// <summary>A straight staircase's bottom piece, and which way the staircase rises (in its own frame, facing north).</summary>
         public class Stair
@@ -355,9 +393,42 @@ namespace FSO.LotView.Components.Geometry
             var measures = $"pictures: bottom {lowHeight}px tall, the others up to {others}px";
             if (lowHeight <= 0) { note = $"its bottom piece draws nothing ({measures})"; return null; }
             if (others <= 0 || lowHeight > others * 1.6f) { note = $"its bottom piece draws the whole staircase ({measures})"; return null; }
+            // in 3D it's drawn from its 3D model, which may be a replacement (a remesh) with the whole staircase on this
+            // piece, or nothing on it
+            var model = ModelSize(piece);
+            if (model != null)
+            {
+                var size = model.Value;
+                measures += $"; 3D model {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} tiles";
+                if (size.X <= 0.02f && size.Y <= 0.02f && size.Z <= 0.02f) { note = $"its bottom piece's 3D model is empty ({measures})"; return null; }
+                if (size.Y > 2.3f || Math.Max(size.X, size.Z) > 1.7f) { note = $"its bottom piece's 3D model is the whole staircase ({measures})"; return null; }
+            }
 
             note = $"bottom piece \"{low.ChunkLabel}\" (0x{low.GUID:X8}) at ({lo.X}, {lo.Y}), top \"{hi.ChunkLabel}\" at ({ho.X}, {ho.Y}): rises toward {FoundationMap.Directions[rise]}; {measures}";
             return new Stair { Piece = piece, Rise = rise, PieceName = low.ChunkLabel };
+        }
+
+        /// <summary>
+        /// The size (tiles: across, up, along) of the 3D model the game draws an object with in 3D (its replacement
+        /// model if it has one, else the one made from its pictures); null if there's none to be had (2D, say).
+        /// </summary>
+        public static Vector3? ModelSize(GameObject obj)
+        {
+            if (obj == null || obj.OBJ.BaseGraphicID == 0) return null;
+            try
+            {
+                var meshes = Content.Content.Get().RCMeshes;
+                var dgrp = obj.Resource.Get<DGRP>(obj.OBJ.BaseGraphicID);
+                if (meshes == null || dgrp == null) return null;
+                var mesh = meshes.Get(dgrp, obj.OBJ);
+                if (mesh == null || mesh.Bounds == null) return null;
+                var b = mesh.Bounds.Value;
+                return b.Max - b.Min;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -429,7 +500,8 @@ namespace FSO.LotView.Components.Geometry
                 sb.AppendLine("  foundation top (bare): floor " + floorName(PlywoodFloor()));
                 sb.AppendLine("  foundation trim: floor " + floorName(TrimFloor()));
                 sb.AppendLine("  deck planks: floor " + floorName(DeckFloor()));
-                sb.AppendLine("  lattice: " + ((LatticeCovering() != 0) ? "wall " + wallName(LatticeCovering()) : "made from the trim's wood"));
+                sb.AppendLine("  lattice: " + ((LatticeCovering() != 0) ? "wall " + wallName(LatticeCovering()) : "strips of the deck planks' wood"));
+                sb.AppendLine("  deck planks run " + (PlanksAlongU() ? "across" : "down") + " their picture (boards round decks take one plank lengthways)");
                 sb.AppendLine("  columns, plain steps: floor " + floorName(ColumnFloor()));
                 sb.AppendLine("Every floor, with its average colour (hue, saturation, value):");
                 foreach (var f in floors)
