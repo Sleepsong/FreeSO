@@ -113,10 +113,11 @@ namespace FSO.LotView.Components
             return pattern == 0 && map.Raise[index] > 0;
         }
 
-        /// <summary>The foundations' models: the concrete (caps, bare tops, steps and plain sides), and one per covering on their sides.</summary>
+        /// <summary>The foundations' and decks' models: one per material, and per covering on foundations' sides.</summary>
         private void AddFoundations(FloorLevel lvl)
         {
-            foreach (var pattern in Modelled3DFoundation.Groups(Bp.Foundations)) lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, pattern));
+            foreach (var (material, pattern) in Modelled3DFoundation.Groups(Bp.Foundations))
+                lvl.FoundationGroups.Add(new Modelled3DFoundation(Bp, material, pattern));
         }
 
         public void SliceReset(GraphicsDevice gd, Rectangle slice)

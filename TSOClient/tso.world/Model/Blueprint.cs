@@ -159,6 +159,16 @@ namespace FSO.LotView.Model
         /// <summary>Foundations on the ground floor (raised tiles and their steps), shared with the simulation. Null for none.</summary>
         public FoundationMap Foundations;
 
+        /// <summary>The staircase pieces standing on foundation steps (see <see cref="FoundationStepsObjects"/>).</summary>
+        public FoundationStepsObjects FoundationSteps;
+
+        /// <summary>Call after <see cref="Foundations"/> or the rooms change: the steps' staircase pieces follow.</summary>
+        public void SyncFoundationSteps()
+        {
+            if (FoundationSteps == null) FoundationSteps = new FoundationStepsObjects(this);
+            FoundationSteps.Sync();
+        }
+
         private bool HasFoundations => Foundations != null && Foundations.Any;
 
         /// <summary>The height of a tile's centre: the ground, and the tile's foundation if it has one.</summary>
@@ -191,7 +201,8 @@ namespace FSO.LotView.Model
         /// <summary>
         /// The foundation side a camera ray meets first (world units, as <see cref="WorldState.CameraRayAtScreenPos"/> gives
         /// for the ground floor): its tile, and which side (see <see cref="FoundationMap.Directions"/>). Only sides that
-        /// show, facing the camera; a foundation's top in front of one hides it. For painting coverings on.
+        /// show on foundations (not decks), facing the camera; a foundation's top in front of one hides it. For painting
+        /// coverings on.
         /// </summary>
         public bool FoundationSideAt(Ray ray, out Point tile, out int dir)
         {
@@ -232,7 +243,7 @@ namespace FSO.LotView.Model
 
                     for (int d = 0; d < 4; d++)
                     {
-                        if (!map.SideShows(x, y, d)) continue;
+                        if (!map.SidePaintable(x, y, d)) continue; //(a foundation's: decks aren't painted)
                         var n = FoundationMap.Directions[d];
                         if (n.X * v.X + n.Y * v.Z >= 0) continue; //facing away
                         Components.Geometry.Modelled3DFoundation.EdgeEnds(x, y, d, out var a, out var b);

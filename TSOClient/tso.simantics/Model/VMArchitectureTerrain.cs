@@ -265,10 +265,10 @@ namespace FSO.SimAntics.Model
         /// <summary>
         /// The foundations' own revision, written in place of the flag saying a lot has any (a reader that takes it as a
         /// bool still sees true). 1: a covering per tile, all put on by the build tool itself (a brick, before the
-        /// foundations were concrete); 2: a covering per tile, for all its sides, 0 for plain concrete; 3: a covering per
-        /// side of each tile, painted on like walls'.
+        /// foundations were concrete); 2: a covering per tile, for all its sides; 3: a covering per side of each tile,
+        /// painted on like walls'; 4: and each tile's kind (foundation or deck) and each set of steps' staircase.
         /// </summary>
-        public const byte FoundationsRevision = 3;
+        public const byte FoundationsRevision = 4;
 
         /// <summary>
         /// Foundations, saved at the very end of a save (version 39 on; see VMMarshal) rather than with the terrain, so
@@ -284,6 +284,8 @@ namespace FSO.SimAntics.Model
             VMSerializableUtils.WriteArray(writer, map.Raise);
             writer.Write(map.Steps);
             VMSerializableUtils.WriteArray(writer, map.Sides);
+            writer.Write(map.Kind);
+            VMSerializableUtils.WriteArray(writer, map.StepStyle);
         }
 
         /// <summary>Reads what <see cref="WriteFoundations"/> wrote: null if the lot has none.</summary>
@@ -299,10 +301,15 @@ namespace FSO.SimAntics.Model
             else
             {
                 //a covering per tile: on all four of its sides. The first foundations' brick was the tool's, not the
-                //player's: they're concrete now, like new ones
+                //player's: they take the foundation's own brick, like new ones
                 var perTile = VMSerializableUtils.ReadArray<ushort>(reader, width * height);
                 if (revision >= 2)
                     for (int i = 0; i < perTile.Length; i++) map.SetAllSides(i, perTile[i]);
+            }
+            if (revision >= 4)
+            {
+                map.Kind = reader.ReadBytes(width * height);
+                map.StepStyle = VMSerializableUtils.ReadArray<uint>(reader, width * height);
             }
             map.Refresh();
             return map;

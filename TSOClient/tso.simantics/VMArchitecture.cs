@@ -374,6 +374,7 @@ namespace FSO.SimAntics
                     Floor = x.Floor,
                     Base = x.LightBaseRoom
                 });
+                WorldUI.SyncFoundationSteps(); //(the steps' pieces take their tiles' rooms' light)
             }
         }
 
@@ -405,6 +406,7 @@ namespace FSO.SimAntics
 
                     WorldUI.AltitudeCenters = Terrain.Centers;
                     WorldUI.Foundations = Terrain.Foundations;
+                    WorldUI.SyncFoundationSteps();
                     WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState);
 
                 }
@@ -418,6 +420,7 @@ namespace FSO.SimAntics
                 if (VM.UseWorld)
                 {
                     WorldUI.Foundations = Terrain.Foundations;
+                    WorldUI.SyncFoundationSteps();
                     WorldUI.Terrain.TerrainDirty = true;
                     //everything standing on the changed tiles goes up or down with them
                     foreach (var ent in Context.VM.Entities) ent.WorldUI?.RefreshAltitude();
@@ -440,6 +443,7 @@ namespace FSO.SimAntics
                 if (VisFoundationsChanged || ShowingVisFoundations)
                 {
                     WorldUI.Foundations = VisFoundationsChanged ? Terrain.VisFoundations : Terrain.Foundations;
+                    WorldUI.SyncFoundationSteps();
                     WorldUI.Terrain.TerrainDirty = true;
                     ShowingVisFoundations = VisFoundationsChanged;
                 }
@@ -660,19 +664,19 @@ namespace FSO.SimAntics
                         break;
 
                     case VMArchitectureCommandType.FOUNDATION_RECT:
-                        //style: height (0 removes), pattern: the wall covering on the sides
-                        var fCount = VMFoundationTools.PlaceFoundation(this, new Rectangle(com.x, com.y, com.x2, com.y2), (short)com.style, com.pattern);
-                        if (fCount > 0) cost += fCount * FoundationTilePrice;
-                        else if (fCount < 0) cost += fCount * FoundationTileSellback;
+                        //style: height (0 removes) in the low 12 bits, the kind of foundation above; pattern: the sides' covering
+                        VMFoundationTools.PlaceFoundation(this, new Rectangle(com.x, com.y, com.x2, com.y2), (short)(com.style & 0xFFF), com.pattern,
+                            (FoundationKind)(com.style >> 12), out var fCost);
+                        cost += fCost;
                         break;
                     case VMArchitectureCommandType.FOUNDATION_STEPS:
                         //pattern: direction the steps rise toward (255 picks the foundation next to the tile), style: 1 places, 0 removes
-                        var sCount = VMFoundationTools.PlaceFoundationSteps(this, new Point(com.x, com.y), com.pattern, com.style != 0);
-                        if (sCount > 0) cost += sCount * FoundationStepsPrice;
-                        else if (sCount < 0) cost += sCount * FoundationStepsSellback;
+                        //x2: the staircase (catalog GUID) whose bottom piece the steps are, 0 for plain steps
+                        VMFoundationTools.PlaceFoundationSteps(this, new Point(com.x, com.y), com.pattern, com.style != 0, (uint)com.x2, out var sCost);
+                        cost += sCost;
                         break;
                     case VMArchitectureCommandType.FOUNDATION_PAINT:
-                        //a wall covering on a foundation's sides, priced as on walls (plain concrete is free)
+                        //a wall covering on a foundation's sides, priced as on walls (its own brick is free)
                         var fpPattern = GetPatternRef(com.pattern);
                         if (fpPattern == null && com.pattern != 0) break;
                         var painted = VMFoundationTools.PaintSides(this, new Point(com.x, com.y), com.x2, com.pattern);
