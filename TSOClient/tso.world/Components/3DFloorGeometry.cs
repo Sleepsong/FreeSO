@@ -308,6 +308,14 @@ namespace FSO.LotView.Components
             }
         }
 
+        /// <summary>The ground under column decks, for grass blades (drawn from TerrainComponent.GroundVertexBuffer): its index buffer and primitives.</summary>
+        public IndexBuffer UnderDeckGrass(out int primitives)
+        {
+            var grp = Floors[0].GroundUnderDecks;
+            primitives = (grp.GPUData == null) ? 0 : grp.GeomForOffset.Count * 2;
+            return grp.GPUData;
+        }
+
         public int SetGrassIndices(GraphicsDevice gd, Effect e, WorldState state)
         {
             var floor = Floors[0];
