@@ -36,7 +36,7 @@ namespace FSO.LotView.Components
     }
 
     /// <summary>
-    /// Foundation steps as the bottom pieces of the game's staircases (see <see cref="FoundationLook.StairPiece"/>): one
+    /// Foundation steps as the bottom pieces of the game's straight staircases (see <see cref="FoundationLook.StairFor"/>): one
     /// object for each set of steps whose staircase the game has, kept in step with the lot's foundations. A staircase
     /// rises a storey over four tiles, so its bottom piece rises a quarter of one over a tile: a foundation's height.
     /// </summary>
@@ -50,8 +50,6 @@ namespace FSO.LotView.Components
             Bp = bp;
         }
 
-        /// <summary>The object facing for steps rising toward a direction (see <see cref="FoundationMap.Directions"/>): a staircase faces the way it rises.</summary>
-        public static Direction FacingFor(int stepDirection) => (Direction)(1 << (stepDirection * 2));
 
         /// <summary>Adds, turns, changes and removes the steps' objects to match the lot's foundations.</summary>
         public void Sync()
@@ -67,8 +65,8 @@ namespace FSO.LotView.Components
                         var i = y * map.Width + x;
                         if (map.Steps[i] == 0 || map.StepTop(x, y) <= 0) continue;
                         var style = map.StepStyle[i];
-                        var piece = FoundationLook.StairPiece(style);
-                        if (piece == null) continue; //drawn plain, with the foundations
+                        var stair = FoundationLook.StairFor(style);
+                        if (stair == null) continue; //drawn plain, with the foundations
                         var dir = map.StepDirection(x, y);
                         seen.Add(i);
                         if (Placed.TryGetValue(i, out var comp))
@@ -80,10 +78,10 @@ namespace FSO.LotView.Components
                             }
                             Remove(i);
                         }
-                        comp = new FoundationStepComponent(piece) { Style = style, StepDirection = dir };
+                        comp = new FoundationStepComponent(stair.Piece) { Style = style, StepDirection = dir };
                         Bp.AddObject(comp);
                         Bp.ChangeObjectLocation(comp, LotTilePos.FromBigTile((short)x, (short)y, 1));
-                        comp.Direction = FacingFor(dir);
+                        comp.Direction = stair.FacingFor(dir); //turned so the staircase rises up the steps
                         Place(comp, x, y);
                         Placed[i] = comp;
                     }

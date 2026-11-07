@@ -10,10 +10,12 @@ namespace FSO.LotView.Components.Geometry
     /// <summary>
     /// The visible parts of foundations and decks (see <see cref="FoundationMap"/>), as in The Sims 2, made from the
     /// game's own textures (see <see cref="FoundationLook"/>):
-    ///  - a foundation: brick sides (or a wall covering painted on them, side by side as on walls), a dark trim round the
-    ///    top edge and down the corners, and a plywood top where no floor is laid;
+    ///  - a foundation: brick sides (or a wall covering painted on them, side by side as on walls) and a plywood top
+    ///    where no floor is laid;
     ///  - a latticed deck: planks on top, a board round the edge, lattice under it;
-    ///  - a column deck: planks on top, a board round the edge, open underneath, on columns.
+    ///  - a column deck: planks on top, a board round the edge, open underneath (the lot's ground is drawn there, see
+    ///    <see cref="TerrainComponent.GroundVertexBuffer"/>), on columns.
+    /// Everything stays on its own tiles: nothing stands out past their edges.
     /// Steps are their staircase's bottom piece (drawn as an object, see <see cref="FoundationStepsObjects"/>); only steps
     /// with no staircase to take are drawn here, plain.
     /// One group (model) per material, and per covering for foundations' sides (<see cref="Groups"/>). Drawn with the
@@ -29,14 +31,8 @@ namespace FSO.LotView.Components.Geometry
         private Texture2D Texture;
 
         protected const float StoreyHeight = 2.95f;
-        /// <summary>How tall the dark trim round a foundation's top edge is (tile units).</summary>
-        public const float TrimHeight = 0.1f;
-        /// <summary>How far the trim (and the corners under it) stand out from the sides: just past a wall built on the edge.</summary>
-        public const float TrimOverhang = 0.08f;
-        /// <summary>How tall the board round a deck's edge is.</summary>
+        /// <summary>How tall the board round a deck's edge is (tile units).</summary>
         public const float FasciaHeight = 0.16f;
-        /// <summary>How far a deck's board stands out past the lattice.</summary>
-        public const float FasciaOverhang = 0.08f;
         /// <summary>A column deck's columns: radius, and their base's.</summary>
         public const float ColumnRadius = 0.1f, ColumnBaseRadius = 0.15f, ColumnBaseHeight = 0.06f;
         private const int ColumnSides = 12;
@@ -88,7 +84,7 @@ namespace FSO.LotView.Components.Geometry
                 {
                     var i = y * map.Width + x;
                     if (map.Raise[i] > 0) AppendTile(map, x, y, floors[i].Pattern == 0, columns.Contains(i), sink);
-                    else if (map.Steps[i] != 0 && FoundationLook.StairPiece(map.StepStyle[i]) == null) AppendSteps(map, x, y, sink);
+                    else if (map.Steps[i] != 0 && FoundationLook.StairFor(map.StepStyle[i]) == null) AppendSteps(map, x, y, sink);
                 }
             }
         }
@@ -118,13 +114,11 @@ namespace FSO.LotView.Components.Geometry
                         {
                             case FoundationKind.Foundation:
                                 result.Add((FoundationMaterial.Plywood, 0));
-                                result.Add((FoundationMaterial.Trim, 0));
                                 for (int dir = 0; dir < 4; dir++)
                                     if (map.SideShows(x, y, dir)) result.Add((FoundationMaterial.Covering, map.SideOf(x, y, dir)));
                                 break;
                             case FoundationKind.LatticedDeck:
                                 result.Add((FoundationMaterial.Planks, 0));
-                                result.Add((FoundationMaterial.Trim, 0));
                                 result.Add((FoundationMaterial.Lattice, 0));
                                 break;
                             case FoundationKind.ColumnDeck:
@@ -133,7 +127,7 @@ namespace FSO.LotView.Components.Geometry
                                 break;
                         }
                     }
-                    else if (map.Steps[i] != 0 && map.StepTop(x, y) > 0 && FoundationLook.StairPiece(map.StepStyle[i]) == null)
+                    else if (map.Steps[i] != 0 && map.StepTop(x, y) > 0 && FoundationLook.StairFor(map.StepStyle[i]) == null)
                         result.Add((FoundationMaterial.Steps, 0));
                 }
             }
@@ -176,41 +170,10 @@ namespace FSO.LotView.Components.Geometry
         private float GroundAt(Point p) => GroundAtVertex(p.X, p.Y);
 
         /// <summary>
-        /// Whether a foundation tile's side shows, with the trim or board on top: it drops to lower ground or a lower
-        /// foundation, and no steps lead up to it.
+        /// Whether a foundation tile's side shows: it drops to lower ground or a lower foundation, and no steps lead up
+        /// to it.
         /// </summary>
         public static bool Capped(FoundationMap map, int x, int y, int dir) => map.SideShows(x, y, dir);
-
-        /// <summary>How the outline round a foundation goes on at one end of a side.</summary>
-        public enum CapEnd
-        {
-            /// <summary>Turns outward, round this tile: the trim runs on round the corner.</summary>
-            Convex,
-            /// <summary>Goes straight on along the next tile's side.</summary>
-            Straight,
-            /// <summary>Turns inward, round the tile beside: the trim meets the next one's face.</summary>
-            Concave,
-            /// <summary>Stops (at steps, the lot's edge, or another kind of foundation): the trim gets an end.</summary>
-            Free
-        }
-
-        /// <summary>
-        /// The end of a side at its corner <paramref name="b"/> (the end going clockwise round the tile, see
-        /// <see cref="EdgeEnds"/>) or the other. The outline only runs on into tiles of the same kind.
-        /// </summary>
-        public static CapEnd EndOf(FoundationMap map, int x, int y, int dir, bool b)
-        {
-            var d = FoundationMap.Directions[dir];
-            var e = FoundationMap.Directions[(dir + 1) % 4]; //along the side, toward b
-            if (!b) e = new Point(-e.X, -e.Y);
-            int turn = b ? 1 : 3;
-            var kind = map.KindOf(x, y);
-            Func<int, int, int, bool> same = (tx, ty, td) => Capped(map, tx, ty, td) && map.KindOf(tx, ty) == kind;
-            if (Capped(map, x, y, (dir + turn) % 4)) return CapEnd.Convex;
-            if (same(x + e.X, y + e.Y, dir)) return CapEnd.Straight;
-            if (same(x + e.X + d.X, y + e.Y + d.Y, (dir + 4 - turn) % 4)) return CapEnd.Concave;
-            return CapEnd.Free;
-        }
 
         /// <summary>A tile's side's two ends (corner vertices), going clockwise round the tile.</summary>
         public static void EdgeEnds(int x, int y, int dir, out Point a, out Point b)
@@ -229,9 +192,7 @@ namespace FSO.LotView.Components.Geometry
             var raise = map.RaiseOf(x, y) * Bp.TerrainFactor;
             var kind = map.KindOf(x, y);
             var deck = kind != FoundationKind.Foundation;
-            var bandHeight = deck ? FasciaHeight : TrimHeight;
-            var bandMaterial = deck ? FoundationMaterial.Planks : FoundationMaterial.Trim;
-            var overhang = deck ? FasciaOverhang : TrimOverhang;
+            var bandHeight = deck ? FasciaHeight : 0f; //a deck's board round its edge; a foundation's sides go right up
             var underBand = raise - bandHeight;
             var c00 = new Vector3(x, GroundAtVertex(x, y) + raise, y);
             var c10 = new Vector3(x + 1, GroundAtVertex(x + 1, y) + raise, y);
@@ -289,14 +250,12 @@ namespace FSO.LotView.Components.Geometry
                     }
                 }
 
-                AppendBand(map, x, y, dir, bandMaterial, raise, bandHeight, overhang, sink);
-
-                // a dark post down the outside corner at the side's far end (each corner is one side's far end)
-                if (kind != FoundationKind.ColumnDeck && EndOf(map, x, y, dir, true) == CapEnd.Convex)
-                {
-                    var next = FoundationMap.Directions[(dir + 1) % 4];
-                    AppendPost(new Vector2(b.X, b.Y), new Vector2(d.X, d.Y), new Vector2(next.X, next.Y), gb, gb + underBand, overhang, sink);
-                }
+                // a deck's board, flush with its side
+                if (deck)
+                    sink(FoundationMaterial.Planks, 0,
+                        new Vector3(a.X, ga + underBand, a.Y), new Vector3(b.X, gb + underBand, b.Y),
+                        new Vector3(b.X, gb + raise, b.Y), new Vector3(a.X, ga + raise, a.Y), normal,
+                        new Vector2(ua, -underBand), new Vector2(ub, -underBand), new Vector2(ub, -raise), new Vector2(ua, -raise));
             }
         }
 
@@ -309,103 +268,11 @@ namespace FSO.LotView.Components.Geometry
 
         /// <summary>
         /// The texture's v on a foundation's side: a wall covering's middle (where it has no skirting or trim), its top
-        /// under the trim.
+        /// at the foundation's top.
         /// </summary>
         private static float SideV(float height, float sideTop)
         {
             return 0.45f + ((sideTop - height) / StoreyHeight) * 0.96f;
-        }
-
-        /// <summary>
-        /// The band round a side's top edge (a foundation's trim, a deck's board): its face, standing out by
-        /// <paramref name="overhang"/>, its top and underside, and its ends where it stops.
-        /// </summary>
-        private void AppendBand(FoundationMap map, int x, int y, int dir, FoundationMaterial material, float raise, float height, float overhang, QuadSink sink)
-        {
-            var d = FoundationMap.Directions[dir];
-            var e = FoundationMap.Directions[(dir + 1) % 4];
-            EdgeEnds(x, y, dir, out var a, out var b);
-            var ga = GroundAt(a);
-            var gb = GroundAt(b);
-            var endA = EndOf(map, x, y, dir, false);
-            var endB = EndOf(map, x, y, dir, true);
-            var bandBottom = raise - height;
-
-            var along = new Vector2(e.X, e.Y);
-            var outward = new Vector2(d.X, d.Y) * overhang;
-            var pa = new Vector2(a.X, a.Y);
-            var pb = new Vector2(b.X, b.Y);
-
-            // its face: round a corner it runs on to meet the next face; at an inside corner it stops at it
-            var faceA = pa - along * EndShift(endA, overhang);
-            var faceB = pb + along * EndShift(endB, overhang);
-            Func<Vector2, float, float, Vector3> at = (p, ground, h) => new Vector3(p.X, ground + h, p.Y);
-            Func<Vector2, float> u = (p) => (d.Y != 0) ? p.X : p.Y;
-            sink(material, 0,
-                at(faceA + outward, ga, bandBottom), at(faceB + outward, gb, bandBottom),
-                at(faceB + outward, gb, raise), at(faceA + outward, ga, raise), new Vector3(d.X, 0, d.Y),
-                new Vector2(u(faceA), -bandBottom), new Vector2(u(faceB), -bandBottom), new Vector2(u(faceB), -raise), new Vector2(u(faceA), -raise));
-
-            // its top and underside: the corner square outside a convex corner goes with the side before it
-            // (clockwise), and the one inside a concave corner with the side after it, so none are drawn twice
-            var stripA = pa + ((endA == CapEnd.Concave) ? along * overhang : Vector2.Zero);
-            var stripB = pb + ((endB == CapEnd.Convex) ? along * overhang : Vector2.Zero);
-            foreach (var h in new[] { raise, bandBottom })
-            {
-                sink(material, 0,
-                    at(stripA, ga, h), at(stripB, gb, h), at(stripB + outward, gb, h), at(stripA + outward, ga, h),
-                    (h == raise) ? Vector3.Up : Vector3.Down,
-                    stripA, stripB, stripB + outward, stripA + outward);
-            }
-
-            // where it stops (at steps), its end
-            if (endA == CapEnd.Free) AppendBandEnd(pa, outward, ga, bandBottom, raise, -along, material, sink);
-            if (endB == CapEnd.Free) AppendBandEnd(pb, outward, gb, bandBottom, raise, along, material, sink);
-        }
-
-        /// <summary>How much further a band's face goes past its side's end: round a corner, or short of the face it meets.</summary>
-        private static float EndShift(CapEnd end, float overhang)
-        {
-            switch (end)
-            {
-                case CapEnd.Convex: return overhang;
-                case CapEnd.Concave: return -overhang;
-                default: return 0;
-            }
-        }
-
-        private static void AppendBandEnd(Vector2 p, Vector2 outward, float ground, float bottom, float top, Vector2 facing, FoundationMaterial material, QuadSink sink)
-        {
-            var q = p + outward;
-            var w = outward.Length();
-            sink(material, 0,
-                new Vector3(p.X, ground + bottom, p.Y), new Vector3(q.X, ground + bottom, q.Y),
-                new Vector3(q.X, ground + top, q.Y), new Vector3(p.X, ground + top, p.Y), new Vector3(facing.X, 0, facing.Y),
-                new Vector2(0, -bottom), new Vector2(w, -bottom), new Vector2(w, -top), new Vector2(0, -top));
-        }
-
-        /// <summary>
-        /// A dark post down an outside corner, under the trim: a square standing out by <paramref name="size"/> from both
-        /// sides that meet there (<paramref name="outA"/> and <paramref name="outB"/> are their outward directions).
-        /// </summary>
-        private static void AppendPost(Vector2 corner, Vector2 outA, Vector2 outB, float bottom, float top, float size, QuadSink sink)
-        {
-            const float inset = 0.02f;
-            var q00 = corner - outA * inset - outB * inset;
-            var q10 = corner + outA * size - outB * inset;
-            var q11 = corner + outA * size + outB * size;
-            var q01 = corner - outA * inset + outB * size;
-            Action<Vector2, Vector2, Vector2> face = (p, q, n) =>
-            {
-                var w = (q - p).Length();
-                sink(FoundationMaterial.Trim, 0,
-                    new Vector3(p.X, bottom, p.Y), new Vector3(q.X, bottom, q.Y), new Vector3(q.X, top, q.Y), new Vector3(p.X, top, p.Y),
-                    new Vector3(n.X, 0, n.Y), new Vector2(0, -bottom), new Vector2(w, -bottom), new Vector2(w, -top), new Vector2(0, -top));
-            };
-            face(q10, q11, outA);
-            face(q11, q01, outB);
-            face(q01, q00, -outA);
-            face(q00, q10, -outB);
         }
 
         /// <summary>A round column from the ground up to a deck's underside, on a wider base.</summary>
