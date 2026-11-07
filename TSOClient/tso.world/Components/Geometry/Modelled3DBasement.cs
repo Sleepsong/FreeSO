@@ -25,10 +25,10 @@ namespace FSO.LotView.Components.Geometry
             return false;
         }
 
-        /// <summary>The texture's v up a side: a wall covering as walls map it, or plain concrete at the floor's scale.</summary>
+        /// <summary>The texture's v up a side: a wall covering (0 for the foundations' brick), as walls map it.</summary>
         private float SideV(float height)
         {
-            return (WallPattern == 0) ? -height : WallV(height);
+            return WallV(height);
         }
 
         protected override void GenerateGeometry()
