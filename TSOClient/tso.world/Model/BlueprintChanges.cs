@@ -141,6 +141,8 @@ namespace FSO.LotView
                 {
                     //process wall changes
                     state.Platform.RecacheWalls(gd, state, wallFlags == BlueprintGlobalChanges.WALL_CUT_CHANGED);
+                    //(the basement's earth's sides leave out the edges walls stand on)
+                    if ((wallFlags & BlueprintGlobalChanges.WALL_CHANGED) > 0) Blueprint.FloorGeom?.BasementWallsChanged(gd);
                     StaticSurfaceDirty = true;
                 }
 

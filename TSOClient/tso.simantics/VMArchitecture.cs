@@ -1,4 +1,4 @@
-using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1055,14 +1055,42 @@ namespace FSO.SimAntics
             return map.IsDug(x, y) || map.IsDug(x - 1, y) || map.IsDug(x + 1, y) || map.IsDug(x, y - 1) || map.IsDug(x, y + 1);
         }
 
+        /// <summary>
+        /// The floor most of a basement tile's dug out neighbours have (not pools or water), for one where a pool's taken
+        /// up; any in the basement if none of them has one; 0 if there are none.
+        /// </summary>
+        public ushort BasementFloorNear(int tileX, int tileY)
+        {
+            var floors = Floors[-1];
+            var counts = new Dictionary<ushort, int>();
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int x = tileX + dx, y = tileY + dy;
+                    if ((dx == 0 && dy == 0) || x < 0 || y < 0 || x >= Width || y >= Height) continue;
+                    var p = floors[GetOffset(x, y)].Pattern;
+                    if (p == 0 || p > 65533) continue;
+                    counts.TryGetValue(p, out var n);
+                    counts[p] = n + 1;
+                }
+            if (counts.Count > 0) return counts.OrderByDescending(x => x.Value).First().Key;
+            foreach (var f in floors) if (f.Pattern != 0 && f.Pattern < 65534) return f.Pattern;
+            return 0;
+        }
+
         public bool SetFloor(short tileX, short tileY, sbyte level, FloorTile floor, bool force)
         {
             //returns false on failure
             var offset = GetOffset(tileX, tileY);
 
-            //the basement: floors only on dug out tiles (level 0 is earth elsewhere), and no pools down there
+            //the basement: floors only on dug out tiles (level 0 is earth elsewhere); pools and water too
             var dug = Terrain.Basement?.IsDug(tileX, tileY) == true;
-            if (level == 0 && (!dug || floor.Pattern > 65533)) return false;
+            if (level == 0 && !dug) return false;
+            if (!force && level == 0 && floor.Pattern == 0 && Floors[level - 1][offset].Pattern > 65533)
+            {
+                //a pool (or water) in the basement taken up: the basement's floor round it comes back (a dug tile always has one)
+                floor.Pattern = BasementFloorNear(tileX, tileY);
+            }
             if (!force)
             {
                 //a dug out tile always has a floor; the tile above it (the basement's ceiling) can be taken up for a

@@ -1,4 +1,4 @@
-using FSO.LotView.Model;
+﻿using FSO.LotView.Model;
 using FSO.LotView.Utils;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -83,7 +83,8 @@ namespace FSO.LotView.Components.Geometry
                 for (int x = 0; x < map.Width; x++)
                 {
                     var i = y * map.Width + x;
-                    if (map.Raise[i] > 0) AppendTile(map, x, y, floors[i].Pattern == 0, columns.Contains(i), sink);
+                    //(no bare top over a stairwell into a basement under it: that's a hole)
+                    if (map.Raise[i] > 0) AppendTile(map, x, y, floors[i].Pattern == 0 && Bp.Basement?.IsDug(x, y) != true, columns.Contains(i), sink);
                     else if (map.Steps[i] != 0 && FoundationLook.StairFor(map.StepStyle[i]) == null) AppendSteps(map, x, y, sink);
                 }
             }

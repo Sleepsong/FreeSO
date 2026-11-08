@@ -41,6 +41,29 @@ namespace FSO.LotView.Components.Geometry
             PrepareGPU(gd);
         }
 
+        /// <summary>
+        /// Whether a wall stands on a dug tile's side toward <paramref name="dir"/>: the earth there is behind it, so isn't
+        /// drawn (it would show through the wall, in 2D especially).
+        /// </summary>
+        private bool WallOnEdge(int x, int y, int dir)
+        {
+            //a tile's walls are its -x side (TopLeft) and its -y side (TopRight); its +x and +y sides are its neighbours'
+            switch (dir)
+            {
+                case 0: return WallAt(x, y, WallSegments.TopRight);
+                case 1: return WallAt(x + 1, y, WallSegments.TopLeft);
+                case 2: return WallAt(x, y + 1, WallSegments.TopRight);
+                default: return WallAt(x, y, WallSegments.TopLeft);
+            }
+        }
+
+        private bool WallAt(int x, int y, WallSegments segment)
+        {
+            var walls = Bp.Walls?[-1];
+            if (walls == null || x < 0 || y < 0 || x >= Bp.Width || y >= Bp.Height) return false;
+            return (walls[y * Bp.Width + x].Segments & segment) != 0;
+        }
+
         private float HeightAt(Point p)
         {
             return SideHeight(Bp.Width, Cut, CutRotation, p);
@@ -91,7 +114,7 @@ namespace FSO.LotView.Components.Geometry
                         if (map.Dug[i] == 0 || map.Pattern[i] != WallPattern) continue;
                         for (int dir = 0; dir < 4; dir++)
                         {
-                            if (!map.EarthSide(x, y, dir)) continue;
+                            if (!map.EarthSide(x, y, dir) || WallOnEdge(x, y, dir)) continue;
                             var d = BasementMap.Directions[dir];
                             // the edge's two ends, going clockwise round the tile
                             Point a, b;
@@ -102,8 +125,10 @@ namespace FSO.LotView.Components.Geometry
                                 case 2: a = new Point(x + 1, y + 1); b = new Point(x, y + 1); break;
                                 default: a = new Point(x, y + 1); b = new Point(x, y); break;
                             }
-                            var ga = GroundAtVertex(a.X, a.Y);
-                            var gb = GroundAtVertex(b.X, b.Y);
+                            //(under a foundation, the basement's floor goes up with it: a storey under the foundation's top)
+                            var raise = Bp.FoundationAt(x, y);
+                            var ga = GroundAtVertex(a.X, a.Y) + raise;
+                            var gb = GroundAtVertex(b.X, b.Y) + raise;
                             var ha = HeightAt(a);
                             var hb = HeightAt(b);
                             var normal = new Vector3(-d.X, 0, -d.Y); //into the basement

@@ -1,4 +1,4 @@
-using FSO.LotView.Model;
+﻿using FSO.LotView.Model;
 using FSO.SimAntics.Entities;
 using Microsoft.Xna.Framework;
 using System;
@@ -80,14 +80,16 @@ namespace FSO.SimAntics.Utils
                         if (map.Steps[i] != 0) continue;
                         if (raise == height)
                         {
-                            //already that high: only its kind changes (nothing on it is in the way)
+                            //already that high: only its kind changes (nothing on it is in the way; but over a basement it stays a foundation)
                             if ((FoundationKind)map.Kind[i] == kind) continue;
+                            if (arch.Basement?.IsDug(x, y) == true && kind != FoundationKind.Foundation) { arch.LastFailReason = FailBlocked; return 0; }
                             cost += TilePrice(kind) - TileSellback((FoundationKind)map.Kind[i]);
                             changes++;
                             continue;
                         }
+                        //over a basement: a foundation (decks are open underneath), its floor going up with it (see below)
                         if (Blocked(arch, x, y) || HasWall(arch, x, y, x1, y1, x2, y2) || IsPool(arch, x, y)
-                            || arch.Basement?.IsDug(x, y) == true) { arch.LastFailReason = FailBlocked; return 0; } //(not over a basement, yet)
+                            || (arch.Basement?.IsDug(x, y) == true && kind != FoundationKind.Foundation)) { arch.LastFailReason = FailBlocked; return 0; }
                         cost += TilePrice(kind) - ((raise > 0) ? TileSellback((FoundationKind)map.Kind[i]) : 0);
                         changes++;
                     }
@@ -101,6 +103,14 @@ namespace FSO.SimAntics.Utils
                 }
             }
             if (changes == 0) return 0;
+            //a basement under it has its floor a storey under its top: all of a basement's floor at one height (not partly under it)
+            var basement = arch.Basement;
+            if (basement != null && basement.Any && !VMBasementTools.FloorEven(arch, new Rectangle(x1, y1, x2 - x1, y2 - y1), basement.IsDug,
+                (x, y) => (x >= x1 && x <= x2 && y >= y1 && y <= y2 && map.Steps[y * map.Width + x] == 0) ? height : map.RaiseOf(x, y)))
+            {
+                arch.LastFailReason = VMBasementTools.FailUneven;
+                return 0;
+            }
 
             for (int y = y1; y <= y2; y++)
             {

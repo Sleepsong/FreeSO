@@ -184,6 +184,13 @@ namespace FSO.LotView.Components
             foreach (var pattern in patterns) lvl.FoundationGroups.Add(new Modelled3DBasement(Bp, pattern));
         }
 
+        /// <summary>The basement's walls changed: its earth's sides are made again (they leave out the edges walls stand on).</summary>
+        public void BasementWallsChanged(GraphicsDevice gd)
+        {
+            foreach (var group in Floors[LevelArray<int>.MinIndex].FoundationGroups)
+                if (group is Modelled3DBasement) group.PrepareGPU(gd);
+        }
+
         public void SliceReset(GraphicsDevice gd, Rectangle slice)
         {
             for (int i = LevelArray<int>.MinIndex; i < Floors.Length; i++) //the basement (-1) and up

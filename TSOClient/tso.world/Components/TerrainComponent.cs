@@ -792,6 +792,8 @@ namespace FSO.LotView.Components
                 pass.Apply();
                 device.DrawIndexedPrimitives(type, 0, 0, GridPrimitives);
             }
+            //the basement's own grid on its floor, which a foundation above raises with it
+            device.SetVertexBuffer(VertexBuffer);
             if (BasementGridPrimitives > 0 && BasementGridIndexBuffer != null)
             {
                 device.Indices = BasementGridIndexBuffer;
