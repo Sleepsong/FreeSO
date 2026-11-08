@@ -4,6 +4,7 @@ using FSO.LotView.Utils;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System.Collections.Generic;
+using System;
 using System.Linq;
 
 namespace FSO.LotView.Components.Geometry
@@ -25,20 +26,33 @@ namespace FSO.LotView.Components.Geometry
 
         private bool[] Cut; //the cutaway it was made with: null for none (whole sides)
         private WorldRotation CutRotation;
+        protected bool Shown; //made for the basement shown (and everything above it hidden)
+        private bool Made;
 
         /// <summary>
-        /// Makes the sides again if the cutaway they were made with has changed: while the basement is shown, sides come down
-        /// where the walls do (so the near ones don't hide it), and are whole otherwise (pass null). Each view that draws them
-        /// (the lot, a live picture) passes its own.
+        /// Makes the sides again for how they're seen, if that's changed: while the basement is shown, sides come down where
+        /// the walls do (so the near ones don't hide it), and go up to a foundation's top; otherwise they're whole (pass null
+        /// for <paramref name="cut"/>), but stop at the ground outside a foundation, where its own side is. Each view that draws
+        /// them (the lot, a live picture) passes its own.
         /// </summary>
-        public void UseCut(GraphicsDevice gd, bool[] cut, WorldRotation rotation)
+        public void UseView(GraphicsDevice gd, bool shown, bool[] cut, WorldRotation rotation)
         {
-            if (cut != null && !cut.Any(x => x)) cut = null; //(nothing cut: whole, as with none)
-            if (cut == null && Cut == null && GPUData != null) return;
-            if (cut != null && Cut != null && rotation == CutRotation && cut.Length == Cut.Length && cut.SequenceEqual(Cut)) return;
+            if (!shown || (cut != null && !cut.Any(x => x))) cut = null; //(nothing cut: whole, as with none)
+            if (Made && shown == Shown)
+            {
+                if (cut == null && Cut == null) return;
+                if (cut != null && Cut != null && rotation == CutRotation && cut.Length == Cut.Length && cut.SequenceEqual(Cut)) return;
+            }
             Cut = (bool[])cut?.Clone();
             CutRotation = rotation;
+            Shown = shown;
             PrepareGPU(gd);
+        }
+
+        public override void PrepareGPU(GraphicsDevice gd)
+        {
+            Made = true;
+            base.PrepareGPU(gd);
         }
 
         /// <summary>
@@ -131,6 +145,17 @@ namespace FSO.LotView.Components.Geometry
                             var gb = GroundAtVertex(b.X, b.Y) + raise;
                             var ha = HeightAt(a);
                             var hb = HeightAt(b);
+                            if (!Shown)
+                            {
+                                //seen from above, a side under a foundation's edge stops at the ground outside it: the foundation's
+                                //own side is above that (the two would flicker against each other)
+                                var outside = Bp.FoundationAt(x + d.X, y + d.Y);
+                                if (outside < raise)
+                                {
+                                    ha = Math.Min(ha, StoreyHeight - (raise - outside));
+                                    hb = Math.Min(hb, StoreyHeight - (raise - outside));
+                                }
+                            }
                             var normal = new Vector3(-d.X, 0, -d.Y); //into the basement
                             float ua = (d.Y != 0) ? a.X : a.Y, ub = (d.Y != 0) ? b.X : b.Y;
                             AddQuad(verts, inds,

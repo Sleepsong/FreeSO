@@ -28,7 +28,7 @@ namespace FSO.LotView.Components.Geometry
         public FoundationMaterial Material;
         /// <summary>For <see cref="FoundationMaterial.Covering"/>: the wall covering on this group's sides (0 for the brick).</summary>
         public ushort WallPattern;
-        private Texture2D Texture;
+        protected Texture2D Texture;
 
         protected const float StoreyHeight = 2.95f;
         /// <summary>How tall the board round a deck's edge is (tile units).</summary>
