@@ -182,6 +182,7 @@ namespace FSO.LotView.Components
                 for (int x = 0; x < map.Width; x++)
                     if (Modelled3DBasement.HasGeometry(map, x, y)) patterns.Add(map.Pattern[y * map.Width + x]);
             foreach (var pattern in patterns) lvl.FoundationGroups.Add(new Modelled3DBasement(Bp, pattern));
+            if (patterns.Count > 0) lvl.FoundationGroups.Add(new Modelled3DBasementSkirt(Bp)); //(black under its floor, round its edge)
         }
 
         /// <summary>The basement's walls changed: its earth's sides are made again (they leave out the edges walls stand on).</summary>
@@ -665,12 +666,12 @@ namespace FSO.LotView.Components
                 {
                     //the earth's sides come down where the walls do, while the basement's shown (they're whole otherwise)
                     if (lightWorld == null && fnd is Modelled3DBasement sides)
-                        sides.UseCut(gd, basementShown ? Bp.Cutaway : null, state?.CutRotation ?? WorldRotation.TopLeft);
+                        sides.UseView(gd, basementShown, Bp.Cutaway, state?.CutRotation ?? WorldRotation.TopLeft);
                     if (fnd.PrimitiveCount == 0 || fnd.GPUData == null) continue;
                     fnd.ResolveTexture(gd, state);
                     e.TexMatrix = new Vector4(1, 0, 0, 1);
                     e.ScreenAlignUV = false;
-                    e.GrassShininess = 0.02f;
+                    e.GrassShininess = (fnd is Modelled3DBasementSkirt) ? 0f : 0.02f; //(the skirt stays black)
                     e.Bias = -0.5f;
                     e.UseTexture = true;
                     e.IgnoreColor = true;
