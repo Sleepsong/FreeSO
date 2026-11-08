@@ -216,12 +216,14 @@ namespace FSO.LotView.RC
 
                     if (topMode < 4)
                     {
-                        var g2 = Fetch(whitepx, whitepx, 0, grp);
+                        //(the groups are fetched as a top goes in them: one left empty can't be made)
+                        WallGroupRC g2 = null;
                         //a basement wall's top, where it's whole: flush with the ground floor, it's lit as the ground floor
                         //while that's shown (its own group: see Draw); the basement under it can be dark (a black line)
                         WallGroupRC gTop = null;
-                        if (level == 0)
+                        Func<WallGroupRC> groundTop = () =>
                         {
+                            if (gTop != null) return gTop;
                             if (GroundTopPx == null || GroundTopPx.IsDisposed || GroundTopPx.GraphicsDevice != device)
                             {
                                 GroundTopPx = new Texture2D(device, 1, 1);
@@ -229,7 +231,8 @@ namespace FSO.LotView.RC
                             }
                             gTop = Fetch(GroundTopPx, whitepx, 0, grp);
                             gTop.GroundLit = true;
-                        }
+                            return gTop;
+                        };
 
                         Vector3 toBack = Vector3.Zero;
 
@@ -264,7 +267,7 @@ namespace FSO.LotView.RC
                                 var k2 = MathHelper.Lerp(h1, h2, s1);
                                 var q1 = Vector3.Lerp(p1, p2, s0) + wallHeight * k1;
                                 var q2 = Vector3.Lerp(p1, p2, s1) + wallHeight * k2;
-                                var gt = (gTop != null && k1 > 0.9f && k2 > 0.9f) ? gTop : g2;
+                                var gt = (level == 0 && k1 > 0.9f && k2 > 0.9f) ? groundTop() : (g2 ?? (g2 = Fetch(whitepx, whitepx, 0, grp)));
                                 var baseI = gt.Verts.Count;
                                 gt.Verts.Add(new WallVertexRC(q1 + toBack * c0, wallTop, new Vector3(0, k1 + l, aboveFloor)));
                                 gt.Verts.Add(new WallVertexRC(q2 + toBack * c0, wallTop, new Vector3(0, k2 + l, aboveFloor)));
@@ -585,6 +588,14 @@ namespace FSO.LotView.RC
 
         public void Complete(GraphicsDevice gd)
         {
+            if (Verts.Count == 0 || Indices.Count == 0)
+            {
+                //nothing in it (all its pieces were clipped away, say): no buffers, nothing to draw
+                GVerts = null;
+                GIndices = null;
+                PrimCount = 0;
+                return;
+            }
             GVerts = new VertexBuffer(gd, typeof(WallVertexRC), Verts.Count, BufferUsage.None);
             GVerts.SetData(Verts.ToArray());
             GIndices = new IndexBuffer(gd, IndexElementSize.ThirtyTwoBits, Indices.Count, BufferUsage.None);
@@ -601,8 +612,8 @@ namespace FSO.LotView.RC
 
         public void Dispose()
         {
-            GVerts.Dispose();
-            GIndices.Dispose();
+            GVerts?.Dispose();
+            GIndices?.Dispose();
         }
     }
 }
