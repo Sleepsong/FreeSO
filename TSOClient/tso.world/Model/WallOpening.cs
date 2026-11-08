@@ -39,8 +39,8 @@ namespace FSO.LotView.Model
         /// </summary>
         public static WallOpening? Measure(SPRFrame frame)
         {
-            if (frame == null) return null;
-            frame.DecodeIfRequired();
+            var opaque = frame?.GetOpaque(); //(a wall style's pixels go once on the GPU: where it's opaque is kept)
+            if (opaque == null || opaque.Length < frame.Width * frame.Height) return null;
             float top = 1, bottom = 0;
             int left = int.MaxValue, right = int.MinValue, firstWall = int.MaxValue, lastWall = int.MinValue;
             for (int x = 0; x < frame.Width; x++)
@@ -48,7 +48,7 @@ namespace FSO.LotView.Model
                 int wallTop = -1, wallBottom = -1;
                 for (int y = 0; y < frame.Height; y++)
                 {
-                    if (frame.GetPixel(x, y).A == 0) continue;
+                    if (!opaque[y * frame.Width + x]) continue;
                     if (wallTop < 0) wallTop = y;
                     wallBottom = y;
                 }
@@ -57,7 +57,7 @@ namespace FSO.LotView.Model
                 lastWall = Math.Max(lastWall, x);
                 for (int y = wallTop; y <= wallBottom; y++)
                 {
-                    if (frame.GetPixel(x, y).A != 0) continue;
+                    if (opaque[y * frame.Width + x]) continue;
                     var f = (y - wallTop) / (float)(wallBottom - wallTop);
                     top = Math.Min(top, f);
                     bottom = Math.Max(bottom, f);

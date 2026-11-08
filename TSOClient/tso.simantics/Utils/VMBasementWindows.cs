@@ -149,7 +149,8 @@ namespace FSO.SimAntics.Utils
                 }
             }
             var name = Name(window);
-            named = name.IndexOf("privacy", StringComparison.OrdinalIgnoreCase) >= 0;
+            named = name.IndexOf("privacy", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Rectangular High", StringComparison.OrdinalIgnoreCase) >= 0; //(the Privacy Window's own name in the game's files)
             float depth = 1;
             try
             {
@@ -162,12 +163,19 @@ namespace FSO.SimAntics.Utils
             return depth;
         }
 
+        /// <summary>Its catalog name (a multi-tile window's parts have none: its master has) and its own name.</summary>
         private static string Name(VMEntity window)
         {
             var obj = window.Object;
             try
             {
-                var ctss = obj.Resource.Get<CTSS>(obj.OBJ.CatalogStringsID);
+                var objd = obj.OBJ;
+                if (objd.MasterID != 0 && objd.SubIndex >= 0)
+                {
+                    foreach (var other in obj.Resource.List<OBJD>() ?? new List<OBJD>())
+                        if (other.MasterID == objd.MasterID && other.SubIndex < 0) { objd = other; break; }
+                }
+                var ctss = obj.Resource.Get<CTSS>(objd.CatalogStringsID);
                 var catalog = ctss?.GetString(0);
                 if (!string.IsNullOrEmpty(catalog)) return catalog + " / " + obj.OBJ.ChunkLabel;
             }
@@ -181,7 +189,11 @@ namespace FSO.SimAntics.Utils
             var obj = window.Object;
             SPR spr = null;
             var style = obj.OBJ.WallStyle;
-            if (style > 21 && style < 256) spr = obj.Resource.Get<SPR>((ushort)(obj.OBJ.WallStyleSpriteID + 2)); //(not loaded yet: in the object)
+            if (style > 21 && style < 256)
+            { //(not loaded yet: in the object; a wall style, as it'll be once it's on a wall)
+                spr = obj.Resource.Get<SPR>((ushort)(obj.OBJ.WallStyleSpriteID + 2));
+                if (spr != null) spr.WallStyle = true;
+            }
             else spr = Content.Content.Get().WorldWalls.GetWallStyle(style)?.WallsUpNear;
             if (spr == null || spr.Frames == null || spr.Frames.Count == 0) return null;
             return spr.Frames[0];

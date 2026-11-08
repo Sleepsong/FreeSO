@@ -295,6 +295,37 @@ namespace FSO.Files.Formats.IFF.Chunks
             return Data[(y * Width) + x];
         }
 
+        /// <summary>A wall style's frame: where it's opaque, kept when its pixels are let go (see <see cref="ReleaseData"/>).</summary>
+        private System.Collections.BitArray Opaque;
+
+        /// <summary>
+        /// Where the frame's opaque (Width by Height, a row at a time), even after its pixels have gone to the GPU, for a wall
+        /// style (where a wall style's mask is see-through, its wall is cut). Null if it can't be told.
+        /// </summary>
+        public System.Collections.BitArray GetOpaque()
+        {
+            var kept = Opaque;
+            if (kept != null) return kept;
+            DecodeIfRequired();
+            return MakeOpaque(Data) ?? Opaque; //(or let go of just now)
+        }
+
+        private static System.Collections.BitArray MakeOpaque(Color[] data)
+        {
+            if (data == null) return null;
+            var result = new System.Collections.BitArray(data.Length);
+            for (int i = 0; i < data.Length; i++) result[i] = data[i].A != 0;
+            return result;
+        }
+
+        /// <summary>Lets go of the pixels once they're on the GPU (a wall style keeps where it's opaque).</summary>
+        private void ReleaseData()
+        {
+            if (IffFile.RETAIN_CHUNK_DATA) return;
+            if (Parent != null && Parent.WallStyle && Opaque == null) Opaque = MakeOpaque(Data);
+            Data = null;
+        }
+
         public void SetPixel(int x, int y, Color color)
         {
             Data[(y * Width) + x] = color;
@@ -331,7 +362,7 @@ namespace FSO.Files.Formats.IFF.Chunks
                                 };
                             }
 
-                            if (!IffFile.RETAIN_CHUNK_DATA) Data = null;
+                            ReleaseData();
 
                             return data;
                         });
@@ -355,7 +386,7 @@ namespace FSO.Files.Formats.IFF.Chunks
                                 };
                             }
 
-                            if (!IffFile.RETAIN_CHUNK_DATA) Data = null;
+                            ReleaseData();
 
                             return data;
                         });
