@@ -30,10 +30,14 @@ namespace FSO.LotView.Effects
                 pMinAvg?.SetValue(value);
             }
         }
+        private Vector3 _WorldToLightFactor;
+        /// <summary>World units to the light map's: a tile (3 world units) along x is 3 * X of it (see LMapBatch.SetMapLayout).</summary>
         public Vector3 WorldToLightFactor
         {
+            get { return _WorldToLightFactor; }
             set
             {
+                _WorldToLightFactor = value;
                 pWorldToLightFactor.SetValue(value);
             }
         }

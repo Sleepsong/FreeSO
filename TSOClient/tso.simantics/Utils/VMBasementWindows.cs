@@ -205,6 +205,27 @@ namespace FSO.SimAntics.Utils
             return WallOpening.Measure(frame)?.Bottom ?? 1;
         }
 
+        /// <summary>
+        /// -logs: where a basement window's set (its wall's flags, the wall it needs, where it's drawn moved to), each time it's
+        /// put on its wall.
+        /// </summary>
+        public static void NoteSetIn(VMEntity window, int placeFlags, WallSegments needs)
+        {
+            try
+            {
+                if (window.Position.Level != 0 || !IsWindow(window)) return;
+                var ui = window.WorldUI as FSO.LotView.Components.ObjectComponent;
+                var bp = ui?.blueprint;
+                var tile = new Vector3(window.Position.TileX + 0.5f, window.Position.TileY + 0.5f, 0);
+                var offset = bp?.BasementWindowOffset(tile, 0, needs) ?? Vector2.Zero;
+                Log(Name(window) + " at (" + window.Position.TileX + ", " + window.Position.TileY + ") facing " + window.Direction
+                    + ": wall flags " + placeFlags + ", needs its " + needs + " wall"
+                    + (bp == null ? ", no world" : (offset == Vector2.Zero ? ", not set in (not on the basement's edge under a foundation)"
+                    : ", set in by (" + offset.X.ToString("0.00") + ", " + offset.Y.ToString("0.00") + ")")));
+            }
+            catch (Exception) { }
+        }
+
         private static bool? Logs;
         /// <summary>-logs: basement-windows.log, what each window was found to be.</summary>
         private static void Log(string line)

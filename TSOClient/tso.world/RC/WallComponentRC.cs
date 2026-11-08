@@ -25,8 +25,44 @@ namespace FSO.LotView.RC
         public Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC> BasementGroups = new Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>();
 
         public Dictionary<ushort, Wall> WallCache = new Dictionary<ushort, Wall>();
-        /// <summary>White, as the walls' tops: keys the basement walls' tops lit as the ground floor apart (see <see cref="WallGroupRC.GroundLit"/>).</summary>
-        private static Texture2D GroundTopPx;
+        /// <summary>
+        /// White, as the walls' tops: keys the basement walls' tops lit as the ground floor apart (see
+        /// <see cref="WallGroupRC.GroundLit"/>), one for each way their light's taken from (see <see cref="TopNudges"/>).
+        /// </summary>
+        private static Texture2D[] GroundTopPx = new Texture2D[5];
+
+        /// <summary>Which way (tiles) a basement wall's top takes its light from: none, or toward a side's tile (+x, -x, +y, -y).</summary>
+        private static readonly Vector2[] TopNudges = { Vector2.Zero, new Vector2(1, 0), new Vector2(-1, 0), new Vector2(0, 1), new Vector2(0, -1) };
+
+        /// <summary>How far toward that side's tile (tiles): to its middle, clear of the wall's line.</summary>
+        public const float TopNudgeDistance = 0.5f;
+
+        /// <summary>
+        /// Whether a tile has something lit on the ground floor over the basement: a floor, or ground (anything but a stairwell's
+        /// hole, which the ground floor's light map leaves dark).
+        /// </summary>
+        private bool GroundSurface(int tx, int ty)
+        {
+            if (tx < 0 || ty < 0 || tx >= blueprint.Width || ty >= blueprint.Height) return false;
+            if (blueprint.Basement?.IsDug(tx, ty) != true) return true;
+            return blueprint.GetFloor((short)tx, (short)ty, 1).Pattern != 0;
+        }
+
+        /// <summary>
+        /// The way a basement wall's top on a tile's line takes its light (an index into <see cref="TopNudges"/>): from the
+        /// side with something lit on the ground floor when only one has (a stairwell's edge: its hole's dark, and the line
+        /// between, where the light was taken, is dark or the basement's), otherwise from the line.
+        /// </summary>
+        private int TopNudge(int x, int y, int topMode)
+        {
+            bool minus, plus;
+            int axis;
+            if (topMode == 0) { minus = GroundSurface(x - 1, y); plus = GroundSurface(x, y); axis = 0; }      //a top left wall: x's line
+            else if (topMode == 1) { minus = GroundSurface(x, y - 1); plus = GroundSurface(x, y); axis = 1; } //a top right wall: y's
+            else return 0;
+            if (minus == plus) return 0;
+            return (axis == 0) ? (plus ? 1 : 2) : (plus ? 3 : 4);
+        }
         public Dictionary<ushort, WallStyle> WallStyleCache = new Dictionary<ushort, WallStyle>();
 
         private Wall GetPattern(ushort id)
@@ -224,13 +260,16 @@ namespace FSO.LotView.RC
                         Func<WallGroupRC> groundTop = () =>
                         {
                             if (gTop != null) return gTop;
-                            if (GroundTopPx == null || GroundTopPx.IsDisposed || GroundTopPx.GraphicsDevice != device)
+                            var nudge = TopNudge(x, y, topMode);
+                            var px = GroundTopPx[nudge];
+                            if (px == null || px.IsDisposed || px.GraphicsDevice != device)
                             {
-                                GroundTopPx = new Texture2D(device, 1, 1);
-                                GroundTopPx.SetData(new[] { Color.White });
+                                px = GroundTopPx[nudge] = new Texture2D(device, 1, 1);
+                                px.SetData(new[] { Color.White });
                             }
-                            gTop = Fetch(GroundTopPx, whitepx, 0, grp);
+                            gTop = Fetch(px, whitepx, 0, grp);
                             gTop.GroundLit = true;
+                            gTop.LightNudge = TopNudges[nudge] * TopNudgeDistance;
                             return gTop;
                         };
 
@@ -450,7 +489,13 @@ namespace FSO.LotView.RC
                     //the ground floor, take the ground floor's while it's shown)
                     var groundLit = g.GroundLit && state.Level > 0;
                     effect.BasementLight = (i == -1) && !groundLit;
-                    effect.LightOffset = groundLit ? baseOffset + LightMappedEffect.GroundCellFromBasement : baseOffset;
+                    if (groundLit)
+                    {
+                        //from the ground floor's cell, at the side with something lit on it (see TopNudge)
+                        var f = effect.WorldToLightFactor * 3; //(a tile)
+                        effect.LightOffset = baseOffset + LightMappedEffect.GroundCellFromBasement + new Vector2(g.LightNudge.X * f.X, g.LightNudge.Y * f.Z);
+                    }
+                    else effect.LightOffset = baseOffset;
                     effect.AnisoTex = g.Pixel;
                     effect.MaskTex = g.Mask;
 
@@ -585,6 +630,8 @@ namespace FSO.LotView.RC
         /// Light maps still take them at the basement's height (they're what keep its light in its rooms).
         /// </summary>
         public bool GroundLit;
+        /// <summary>For <see cref="GroundLit"/> tops: how far (tiles) from them their light's taken, toward a lit side.</summary>
+        public Vector2 LightNudge;
 
         public void Complete(GraphicsDevice gd)
         {
