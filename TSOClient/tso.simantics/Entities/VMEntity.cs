@@ -1378,8 +1378,12 @@ namespace FSO.SimAntics
                 if (Thread != null) ExecuteEntryPoint(6, Thread.Context, true, this);
             }
 
-            //(the world raises wall-mounted things with their wall, on a foundation's edge)
-            if (UseWorld && WorldUI is ObjectComponent wallObj) wallObj.WallAttachment = set ? (WallSegments)rotPart : 0;
+            //(the world raises wall-mounted things with their wall, on a foundation's edge, and sets basement windows into
+            //it: the walls it needs are the flags' low four bits, turned with it. rotPart above takes them % 15, which mixes
+            //in higher bits: a window's "no corner" (16) made its wall in front read as the one on its right)
+            var needs = (WallSegments)RotateWallSegs((WallSegments)((int)placeFlags & 15), rotate);
+            if (UseWorld && WorldUI is ObjectComponent wallObj) wallObj.WallAttachment = set ? needs : 0;
+            if (set && UseWorld) Utils.VMBasementWindows.NoteSetIn(this, (int)placeFlags, needs);
 
             if (rotPart == 0) return;
 

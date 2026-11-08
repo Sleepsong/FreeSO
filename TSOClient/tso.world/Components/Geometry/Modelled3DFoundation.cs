@@ -253,25 +253,10 @@ namespace FSO.LotView.Components.Geometry
                             //cut round a basement window's opening, where a basement under it has one in a wall on this side
                             var pattern = map.SideOf(x, y, dir);
                             var opening = BasementWindowOn(x, y, dir);
-                            float holeBottom = 0, holeTop = 0;
-                            if (opening != null)
-                            {
-                                holeTop = Math.Min(underBand, raise - opening.Value.Top * 2.95f);
-                                holeBottom = Math.Max(bottom, raise - opening.Value.Bottom * 2.95f);
-                            }
-                            if (opening == null || holeTop - holeBottom < 0.01f)
+                            //(the mask's laid on the wall from one end: on a tile's +x and +y sides that's this side's far end)
+                            if (opening?.Open == null || !ShapedSide(sink, pattern, a, b, ga, gb, bottom, underBand, raise, ua, ub, normal,
+                                opening.Value, dir == 1 || dir == 2))
                                 CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, bottom, underBand, ua, ub, normal, underBand);
-                            else
-                            {
-                                float u0 = Math.Max(0, Math.Min(1, opening.Value.Left)), u1 = Math.Max(u0, Math.Min(1, opening.Value.Right));
-                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, bottom, holeBottom, ua, ub, normal, underBand);
-                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, holeTop, underBand, ua, ub, normal, underBand);
-                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, u0, holeBottom, holeTop, ua, ub, normal, underBand);
-                                CoveringPiece(sink, pattern, a, b, ga, gb, u1, 1, holeBottom, holeTop, ua, ub, normal, underBand);
-                                //and lined, back to the basement wall's inside, where the window's set in (see
-                                //Blueprint.BasementWindowRecess): the brick's a wall's thickness, not paper
-                                HoleReveals(sink, pattern, a, b, ga, gb, u0, u1, holeBottom, holeTop, ua, ub, normal, underBand);
-                            }
                         }
                     }
                 }
@@ -343,27 +328,73 @@ namespace FSO.LotView.Components.Geometry
         public const float RevealDepth = 0.075f;
 
         /// <summary>
-        /// The insides of a hole in a side (from <paramref name="u0"/> to <paramref name="u1"/> along it, <paramref name="h0"/>
-        /// to <paramref name="h1"/> up it): its top, sill and ends, <see cref="RevealDepth"/> in from the side, in its covering.
+        /// A side with a basement window's opening cut in it, the opening's own shape (its wall style's mask, cell by cell: see
+        /// <see cref="WallOpening.Open"/>), lined <see cref="RevealDepth"/> in where the brick meets the hole. The side's heights
+        /// run from <paramref name="bottom"/> (the ground) to <paramref name="sideTop"/>; the wall under it goes up to the
+        /// foundation's top, <paramref name="raise"/>. <paramref name="mirrored"/>: the mask runs from this side's far end.
+        /// False if none of the opening is above the ground (the side is drawn whole).
         /// </summary>
-        private static void HoleReveals(QuadSink sink, ushort pattern, Point a, Point b, float ga, float gb, float u0, float u1, float h0, float h1,
-            float ua, float ub, Vector3 normal, float sideTop)
+        private static bool ShapedSide(QuadSink sink, ushort pattern, Point a, Point b, float ga, float gb, float bottom, float sideTop, float raise,
+            float ua, float ub, Vector3 normal, WallOpening opening, bool mirrored)
         {
-            if (u1 - u0 < 0.001f || h1 - h0 < 0.001f) return;
+            const int gu = WallOpening.GridU, gk = WallOpening.GridK;
+            Func<int, float> rowH = (j) => raise - (1 - j / (float)gk) * StoreyHeight; //(row j's foot, on the side)
+            Func<int, int> col = (sCol) => mirrored ? gu - 1 - sCol : sCol;           //(the mask's column at this side's column)
+            Func<int, int, bool> open = (sCol, j) => sCol >= 0 && sCol < gu && opening.IsOpen(col(sCol), j)
+                && rowH(j + 1) > bottom + 0.001f && rowH(j) < sideTop - 0.001f;
+            int jMin = int.MaxValue, jMax = int.MinValue;
+            for (int j = 0; j < gk; j++)
+                for (int sc = 0; sc < gu; sc++)
+                    if (open(sc, j)) { jMin = Math.Min(jMin, j); jMax = Math.Max(jMax, j); }
+            if (jMin > jMax) return false;
+
+            //whole below and above the opening's rows; along its rows, the brick either side of the hole
+            var holeFoot = Math.Max(bottom, rowH(jMin));
+            var holeHead = Math.Min(sideTop, rowH(jMax + 1));
+            CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, bottom, holeFoot, ua, ub, normal, sideTop);
+            CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, holeHead, sideTop, ua, ub, normal, sideTop);
             Func<float, float, Vector3> at = (u, h) => new Vector3(a.X + (b.X - a.X) * u, ga + (gb - ga) * u + h, a.Y + (b.Y - a.Y) * u);
             var inward = -normal * RevealDepth;
             var along = new Vector3(b.X - a.X, 0, b.Y - a.Y);
-            float t0 = ua + (ub - ua) * u0, t1 = ua + (ub - ua) * u1, dv = RevealDepth * 0.96f / StoreyHeight;
-            float v0 = SideV(h0, sideTop), v1 = SideV(h1, sideTop);
-            //the top (facing down), the sill (up), and the ends (facing each other)
-            RevealQuad(sink, pattern, at(u0, h1), at(u1, h1), at(u1, h1) + inward, at(u0, h1) + inward, Vector3.Down,
-                new Vector2(t0, v1), new Vector2(t1, v1), new Vector2(t1, v1 - dv), new Vector2(t0, v1 - dv));
-            RevealQuad(sink, pattern, at(u0, h0), at(u1, h0), at(u1, h0) + inward, at(u0, h0) + inward, Vector3.Up,
-                new Vector2(t0, v0), new Vector2(t1, v0), new Vector2(t1, v0 + dv), new Vector2(t0, v0 + dv));
-            RevealQuad(sink, pattern, at(u0, h0), at(u0, h1), at(u0, h1) + inward, at(u0, h0) + inward, along,
-                new Vector2(t0, v0), new Vector2(t0, v1), new Vector2(t0 + RevealDepth, v1), new Vector2(t0 + RevealDepth, v0));
-            RevealQuad(sink, pattern, at(u1, h0), at(u1, h1), at(u1, h1) + inward, at(u1, h0) + inward, -along,
-                new Vector2(t1, v0), new Vector2(t1, v1), new Vector2(t1 - RevealDepth, v1), new Vector2(t1 - RevealDepth, v0));
+            float dv = RevealDepth * 0.96f / StoreyHeight;
+            Func<float, float> tAt = (u) => ua + (ub - ua) * u;
+            for (int j = jMin; j <= jMax; j++)
+            {
+                float h0 = Math.Max(bottom, rowH(j)), h1 = Math.Min(sideTop, rowH(j + 1));
+                if (h1 - h0 < 0.001f) continue;
+                float v0 = SideV(h0, sideTop), v1 = SideV(h1, sideTop);
+                //the brick: runs of shut cells along the row
+                int run = -1;
+                for (int sc = 0; sc <= gu; sc++)
+                {
+                    var shut = sc < gu && !open(sc, j);
+                    if (shut && run < 0) run = sc;
+                    else if (!shut && run >= 0)
+                    {
+                        CoveringPiece(sink, pattern, a, b, ga, gb, run / (float)gu, sc / (float)gu, h0, h1, ua, ub, normal, sideTop);
+                        run = -1;
+                    }
+                }
+                //the lining: wherever an open cell meets brick (or the ground, at its sill)
+                for (int sc = 0; sc < gu; sc++)
+                {
+                    if (!open(sc, j)) continue;
+                    float u0 = sc / (float)gu, u1 = (sc + 1) / (float)gu;
+                    if (!open(sc - 1, j))
+                        RevealQuad(sink, pattern, at(u0, h0), at(u0, h1), at(u0, h1) + inward, at(u0, h0) + inward, along,
+                            new Vector2(tAt(u0), v0), new Vector2(tAt(u0), v1), new Vector2(tAt(u0) + RevealDepth, v1), new Vector2(tAt(u0) + RevealDepth, v0));
+                    if (!open(sc + 1, j))
+                        RevealQuad(sink, pattern, at(u1, h0), at(u1, h1), at(u1, h1) + inward, at(u1, h0) + inward, -along,
+                            new Vector2(tAt(u1), v0), new Vector2(tAt(u1), v1), new Vector2(tAt(u1) - RevealDepth, v1), new Vector2(tAt(u1) - RevealDepth, v0));
+                    if (!open(sc, j + 1))
+                        RevealQuad(sink, pattern, at(u0, h1), at(u1, h1), at(u1, h1) + inward, at(u0, h1) + inward, Vector3.Down,
+                            new Vector2(tAt(u0), v1), new Vector2(tAt(u1), v1), new Vector2(tAt(u1), v1 - dv), new Vector2(tAt(u0), v1 - dv));
+                    if (!open(sc, j - 1))
+                        RevealQuad(sink, pattern, at(u0, h0), at(u1, h0), at(u1, h0) + inward, at(u0, h0) + inward, Vector3.Up,
+                            new Vector2(tAt(u0), v0), new Vector2(tAt(u1), v0), new Vector2(tAt(u1), v0 + dv), new Vector2(tAt(u0), v0 + dv));
+                }
+            }
+            return true;
         }
 
         /// <summary>A quad of a hole's lining, wound as the sides are for its facing (<paramref name="normal"/>).</summary>

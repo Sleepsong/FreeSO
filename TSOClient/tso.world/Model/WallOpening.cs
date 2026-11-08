@@ -1,4 +1,5 @@
 using FSO.Files.Formats.IFF.Chunks;
+using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 
@@ -12,6 +13,29 @@ namespace FSO.LotView.Model
     public struct WallOpening
     {
         public float Top, Bottom, Left, Right;
+
+        /// <summary>The cells of <see cref="Open"/>: along the wall, and up it.</summary>
+        public const int GridU = 32, GridK = 96;
+
+        /// <summary>
+        /// The hole's shape, a cell at a time: <see cref="GridU"/> along the wall (as its mask is laid on it: see
+        /// <see cref="MaskCoord"/>) by <see cref="GridK"/> up it from its foot, row by row from the foot. Null if not known.
+        /// </summary>
+        public bool[] Open;
+
+        /// <summary>Whether a cell's in the hole (<paramref name="i"/> along, <paramref name="j"/> up; outside the grid isn't).</summary>
+        public bool IsOpen(int i, int j) => Open != null && i >= 0 && j >= 0 && i < GridU && j < GridK && Open[j * GridU + i];
+
+        /// <summary>
+        /// Where on a wall style's mask (0 to 1 across and down its frame) a point of the wall is: <paramref name="u"/> along it,
+        /// <paramref name="k"/> up it (0 at its foot, 1 at its top). As the walls' shader samples it (RCObject.fx, psWallRC): the
+        /// mask is a top right wall's, slanted, so it's skewed up the wall.
+        /// </summary>
+        public static Vector2 MaskCoord(float u, float k)
+        {
+            var v = (k * 0.970f) * -(1 - 0.1185f) + (1 - u) * 0.1185f - 0.117f;
+            return new Vector2(u, v - (float)Math.Floor(v));
+        }
 
         private static Dictionary<ushort, WallOpening?> ByStyle = new Dictionary<ushort, WallOpening?>();
 
@@ -67,13 +91,42 @@ namespace FSO.LotView.Model
             }
             if (left > right || lastWall <= firstWall) return null;
             var width = (float)(lastWall - firstWall);
-            return new WallOpening
+            var result = new WallOpening
             {
                 Top = top,
                 Bottom = bottom,
                 Left = (left - firstWall) / width,
                 Right = (right - firstWall) / width
             };
+            result.Open = SampleGrid(frame, opaque, result);
+            return result;
+        }
+
+        /// <summary>
+        /// The hole's cells (see <see cref="Open"/>): where the mask's see-through, as it's laid on the wall. Only round the
+        /// opening found (a little either way): the mask's edges, slanted, can read as see-through along the wall's top and foot.
+        /// </summary>
+        private static bool[] SampleGrid(SPRFrame frame, System.Collections.BitArray opaque, WallOpening box)
+        {
+            int w = frame.Width, h = frame.Height;
+            if (w <= 0 || h <= 0) return null;
+            var grid = new bool[GridU * GridK];
+            float kLow = 1 - box.Bottom - 0.04f, kHigh = 1 - box.Top + 0.04f; //(the opening, up the wall)
+            for (int j = 0; j < GridK; j++)
+            {
+                var k = (j + 0.5f) / GridK;
+                if (k < kLow || k > kHigh || k < 0.02f || k > 0.98f) continue;
+                for (int i = 0; i < GridU; i++)
+                {
+                    var u = (i + 0.5f) / GridU;
+                    if (u < 0.02f || u > 0.98f) continue;
+                    var c = MaskCoord(u, k);
+                    int px = Math.Min(w - 1, Math.Max(0, (int)(c.X * w)));
+                    int py = Math.Min(h - 1, Math.Max(0, (int)(c.Y * h)));
+                    grid[j * GridU + i] = !opaque[py * w + px];
+                }
+            }
+            return grid;
         }
     }
 }
