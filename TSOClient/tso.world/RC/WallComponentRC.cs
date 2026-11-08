@@ -25,6 +25,8 @@ namespace FSO.LotView.RC
         public Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC> BasementGroups = new Dictionary<Tuple<Texture2D, Texture2D>, WallGroupRC>();
 
         public Dictionary<ushort, Wall> WallCache = new Dictionary<ushort, Wall>();
+        /// <summary>White, as the walls' tops: keys the basement walls' tops lit as the ground floor apart (see <see cref="WallGroupRC.GroundLit"/>).</summary>
+        private static Texture2D GroundTopPx;
         public Dictionary<ushort, WallStyle> WallStyleCache = new Dictionary<ushort, WallStyle>();
 
         private Wall GetPattern(ushort id)
@@ -215,6 +217,19 @@ namespace FSO.LotView.RC
                     if (topMode < 4)
                     {
                         var g2 = Fetch(whitepx, whitepx, 0, grp);
+                        //a basement wall's top, where it's whole: flush with the ground floor, it's lit as the ground floor
+                        //while that's shown (its own group: see Draw); the basement under it can be dark (a black line)
+                        WallGroupRC gTop = null;
+                        if (level == 0)
+                        {
+                            if (GroundTopPx == null || GroundTopPx.IsDisposed || GroundTopPx.GraphicsDevice != device)
+                            {
+                                GroundTopPx = new Texture2D(device, 1, 1);
+                                GroundTopPx.SetData(new[] { Color.White });
+                            }
+                            gTop = Fetch(GroundTopPx, whitepx, 0, grp);
+                            gTop.GroundLit = true;
+                        }
 
                         Vector3 toBack = Vector3.Zero;
 
@@ -249,14 +264,15 @@ namespace FSO.LotView.RC
                                 var k2 = MathHelper.Lerp(h1, h2, s1);
                                 var q1 = Vector3.Lerp(p1, p2, s0) + wallHeight * k1;
                                 var q2 = Vector3.Lerp(p1, p2, s1) + wallHeight * k2;
-                                var baseI = g2.Verts.Count;
-                                g2.Verts.Add(new WallVertexRC(q1 + toBack * c0, wallTop, new Vector3(0, k1 + l, aboveFloor)));
-                                g2.Verts.Add(new WallVertexRC(q2 + toBack * c0, wallTop, new Vector3(0, k2 + l, aboveFloor)));
-                                g2.Verts.Add(new WallVertexRC(q1 + toBack * c1, wallTop, new Vector3(0, k1 + l, aboveFloor)));
-                                g2.Verts.Add(new WallVertexRC(q2 + toBack * c1, wallTop, new Vector3(0, k2 + l, aboveFloor)));
+                                var gt = (gTop != null && k1 > 0.9f && k2 > 0.9f) ? gTop : g2;
+                                var baseI = gt.Verts.Count;
+                                gt.Verts.Add(new WallVertexRC(q1 + toBack * c0, wallTop, new Vector3(0, k1 + l, aboveFloor)));
+                                gt.Verts.Add(new WallVertexRC(q2 + toBack * c0, wallTop, new Vector3(0, k2 + l, aboveFloor)));
+                                gt.Verts.Add(new WallVertexRC(q1 + toBack * c1, wallTop, new Vector3(0, k1 + l, aboveFloor)));
+                                gt.Verts.Add(new WallVertexRC(q2 + toBack * c1, wallTop, new Vector3(0, k2 + l, aboveFloor)));
 
-                                g2.Indices.Add(baseI); g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 1);
-                                g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 3); g2.Indices.Add(baseI + 1);
+                                gt.Indices.Add(baseI); gt.Indices.Add(baseI + 2); gt.Indices.Add(baseI + 1);
+                                gt.Indices.Add(baseI + 2); gt.Indices.Add(baseI + 3); gt.Indices.Add(baseI + 1);
                             }
                         }
                     }
@@ -420,13 +436,18 @@ namespace FSO.LotView.RC
             if (GroupsByTexture.Count < state.Level) return;
 
             //the basement (level 0, i = -1) and up to the level shown
+            var baseOffset = effect.LightOffset;
             for (int i = -1; i < state.Level; i++)
             {
                 var grp = (i == -1) ? BasementGroups : GroupsByTexture[i];
-                effect.BasementLight = (i == -1); //(walls find their floor's light by their height: the basement's is moved)
                 foreach (var g in grp.Values)
                 {
                     if (g.PrimCount == 0) continue;
+                    //(walls find their floor's light by their height: the basement's is moved; its walls' tops, flush with
+                    //the ground floor, take the ground floor's while it's shown)
+                    var groundLit = g.GroundLit && state.Level > 0;
+                    effect.BasementLight = (i == -1) && !groundLit;
+                    effect.LightOffset = groundLit ? baseOffset + LightMappedEffect.GroundCellFromBasement : baseOffset;
                     effect.AnisoTex = g.Pixel;
                     effect.MaskTex = g.Mask;
 
@@ -446,6 +467,7 @@ namespace FSO.LotView.RC
                 }
             }
             effect.BasementLight = false;
+            effect.LightOffset = baseOffset;
             if (!gd.RasterizerState.ScissorTestEnable) gd.RasterizerState = RasterizerState.CullNone;
         }
 
@@ -555,6 +577,11 @@ namespace FSO.LotView.RC
         public int PrimCount;
 
         public bool ClearOnComplete;
+        /// <summary>
+        /// The basement walls' tops where they're whole: flush with the ground floor, they're lit as it is while it's shown.
+        /// Light maps still take them at the basement's height (they're what keep its light in its rooms).
+        /// </summary>
+        public bool GroundLit;
 
         public void Complete(GraphicsDevice gd)
         {

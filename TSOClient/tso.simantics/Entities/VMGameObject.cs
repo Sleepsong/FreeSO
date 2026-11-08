@@ -48,10 +48,14 @@ namespace FSO.SimAntics
                 case VMStackObjectVariable.Flags:
                     var flags = (VMEntityFlags)value;
                     if (UseWorld)
+                    {
                         ((ObjectComponent)WorldUI).HideForCutaway = (flags & VMEntityFlags.HideForCutaway) > 0;
+                        RefreshWallWindow((VMEntityFlags2)GetValue(VMStackObjectVariable.FlagField2));
+                    }
                 //            || ((VMEntityFlags2)GetValue(VMStackObjectVariable.FlagField2) & VMEntityFlags2.ArchitectualDoor) > 0;
                     break;
                 case VMStackObjectVariable.FlagField2:
+                    if (UseWorld) RefreshWallWindow((VMEntityFlags2)value);
                     /*
                     var flags2 = (VMEntityFlags2)value;
                     if (UseWorld)
@@ -66,6 +70,12 @@ namespace FSO.SimAntics
         public override short GetValue(VMStackObjectVariable var)
         {
             return base.GetValue(var);
+        }
+
+        /// <summary>A window's drawn set into a foundation, in a basement wall (see ObjectComponent.WallWindow).</summary>
+        private void RefreshWallWindow(VMEntityFlags2 flags2)
+        {
+            ((ObjectComponent)WorldUI).WallWindow = (flags2 & VMEntityFlags2.ArchitectualWindow) > 0;
         }
 
         public bool RefreshGraphic()

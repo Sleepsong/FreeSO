@@ -55,6 +55,12 @@ namespace FSO.LotView.Effects
         /// </summary>
         public static readonly Vector2 BasementCellShift = new Vector2(1, 1);
 
+        /// <summary>
+        /// For the basement's draws that are lit as the ground floor (the tops of its walls, flush with it, while it's shown):
+        /// their level works out to the basement's, the cell at (-1, -1); a cell on in each direction is the ground floor's.
+        /// </summary>
+        public static readonly Vector2 GroundCellFromBasement = new Vector2(1 / 3f, 1 / 2f);
+
         private bool _BasementLight;
         /// <summary>
         /// Whether what's drawn next is in the basement, so takes its light from the basement's cell of the light map.

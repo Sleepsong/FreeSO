@@ -38,6 +38,22 @@ namespace FSO.LotView.Components
         public bool HideForCutaway;
         public WallSegments AdjacentWall;
 
+        private bool _WallWindow;
+        /// <summary>
+        /// A window (in a wall): in a basement wall where a foundation lifts the basement above the ground outside, it's drawn
+        /// set into the foundation (see <see cref="Blueprint.BasementWindowOffset"/>).
+        /// </summary>
+        public bool WallWindow
+        {
+            get => _WallWindow;
+            set
+            {
+                if (_WallWindow == value) return;
+                _WallWindow = value;
+                _WorldDirty = true;
+            }
+        }
+
         private WallSegments _WallAttachment;
         /// <summary>
         /// The walls of its tile this object needs (paintings, windows, doors...): it stands as high as they do, so on
@@ -95,6 +111,8 @@ namespace FSO.LotView.Components
                 {
                     _BoundsDirty = true;
                     var worldPosition = WorldSpace.GetWorldFromTile(Position);
+                    if (WallWindow && Level == 0 && blueprint != null)
+                        worldPosition += WorldSpace.GetWorldFromTile(blueprint.BasementWindowOffset(new Vector3(0.5f, 0.5f, 0) + Position - MTOffset / 16, Level, AttachedWalls));
                     _World3D = Matrix.CreateTranslation(new Vector3(1.5f, 0.1f, 1.5f)) * Matrix.CreateTranslation(worldPosition);
                     if (GroundAlign != null) _World = GroundAlign.Value * _World;
                     _World3D = Matrix.CreateScale(3f) * Matrix.CreateRotationY(-RadianDirection) * _World3D;
