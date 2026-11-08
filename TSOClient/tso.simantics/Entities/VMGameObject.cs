@@ -72,6 +72,7 @@ namespace FSO.SimAntics
             var component = (ObjectComponent)WorldUI;
             component.HideForCutaway = (flags & VMEntityFlags.HideForCutaway) > 0;
             component.HideForCutawayInWall = VM.GlobTS1 && (flags2 & VMEntityFlags2.ArchitectualDoor) > 0;
+            component.WallWindow = (flags2 & VMEntityFlags2.ArchitectualWindow) > 0; //(set into a foundation, in a basement wall)
         }
 
         public bool RefreshGraphic()

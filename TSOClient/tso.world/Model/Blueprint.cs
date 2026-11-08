@@ -289,6 +289,44 @@ namespace FSO.LotView.Model
         /// The height of an object attached to walls: its tile's, unless a wall it's attached to stands on a higher
         /// foundation (a window on the outside of a wall on a foundation's edge).
         /// </summary>
+        /// <summary>
+        /// How far (tiles) a window in a basement wall is set in from the wall's line, where a foundation lifts the basement
+        /// above the ground outside: the foundation's side is the wall's outside there, so the window sits into it as a
+        /// basement window does (it stood out of the brick: it's made for a wall's outside face, half a wall further out).
+        /// </summary>
+        public const float BasementWindowRecess = 0.15f;
+
+        /// <summary>
+        /// Where a window at <paramref name="position"/> (tile units: its tile is the one it's on) on level
+        /// <paramref name="level"/> is drawn moved to (tile units, across the ground): toward the basement by
+        /// <see cref="BasementWindowRecess"/> if a wall it's in (<paramref name="attached"/>) is on the basement's edge with
+        /// a foundation lifting it above the ground outside; nowhere otherwise.
+        /// </summary>
+        public Vector2 BasementWindowOffset(Vector3 position, sbyte level, WallSegments attached)
+        {
+            if (level != 0 || attached == 0 || Basement == null || !Basement.Any || !HasFoundations) return Vector2.Zero;
+            int x = (int)Math.Floor(position.X), y = (int)Math.Floor(position.Y);
+            //a tile's top left wall is its -x side, top right its -y side, bottom right +x, bottom left +y
+            var sides = new (WallSegments seg, int dx, int dy)[]
+            {
+                (WallSegments.TopLeft, -1, 0), (WallSegments.TopRight, 0, -1), (WallSegments.BottomRight, 1, 0), (WallSegments.BottomLeft, 0, 1)
+            };
+            foreach (var side in sides)
+            {
+                if ((attached & side.seg) == 0) continue;
+                int ox = x + side.dx, oy = y + side.dy;
+                bool here = Basement.IsDug(x, y), there = Basement.IsDug(ox, oy);
+                if (here == there) continue;
+                var dugRaise = here ? Foundations.RaiseOf(x, y) : Foundations.RaiseOf(ox, oy);
+                var earthRaise = here ? Foundations.RaiseOf(ox, oy) : Foundations.RaiseOf(x, y);
+                if (dugRaise <= earthRaise) continue;
+                //toward the basement: away from the wall if it's on the basement's side, through it if it's on the earth's
+                var toward = here ? new Vector2(-side.dx, -side.dy) : new Vector2(side.dx, side.dy);
+                return toward * BasementWindowRecess;
+            }
+            return Vector2.Zero;
+        }
+
         public float WallObjectAltitude(Vector3 position, WallSegments attached)
         {
             var result = InterpAltitude(position);

@@ -268,6 +268,9 @@ namespace FSO.LotView.Components.Geometry
                                 CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, holeTop, underBand, ua, ub, normal, underBand);
                                 CoveringPiece(sink, pattern, a, b, ga, gb, 0, u0, holeBottom, holeTop, ua, ub, normal, underBand);
                                 CoveringPiece(sink, pattern, a, b, ga, gb, u1, 1, holeBottom, holeTop, ua, ub, normal, underBand);
+                                //and lined, back to the basement wall's inside, where the window's set in (see
+                                //Blueprint.BasementWindowRecess): the brick's a wall's thickness, not paper
+                                HoleReveals(sink, pattern, a, b, ga, gb, u0, u1, holeBottom, holeTop, ua, ub, normal, underBand);
                             }
                         }
                     }
@@ -334,6 +337,44 @@ namespace FSO.LotView.Components.Geometry
             float t0 = ua + (ub - ua) * u0, t1 = ua + (ub - ua) * u1;
             sink(FoundationMaterial.Covering, pattern, at(u0, h0), at(u1, h0), at(u1, h1), at(u0, h1), normal,
                 new Vector2(t0, SideV(h0, sideTop)), new Vector2(t1, SideV(h0, sideTop)), new Vector2(t1, SideV(h1, sideTop)), new Vector2(t0, SideV(h1, sideTop)));
+        }
+
+        /// <summary>How deep the hole for a basement window in a foundation's side is lined: to the basement wall's inside face.</summary>
+        public const float RevealDepth = 0.075f;
+
+        /// <summary>
+        /// The insides of a hole in a side (from <paramref name="u0"/> to <paramref name="u1"/> along it, <paramref name="h0"/>
+        /// to <paramref name="h1"/> up it): its top, sill and ends, <see cref="RevealDepth"/> in from the side, in its covering.
+        /// </summary>
+        private static void HoleReveals(QuadSink sink, ushort pattern, Point a, Point b, float ga, float gb, float u0, float u1, float h0, float h1,
+            float ua, float ub, Vector3 normal, float sideTop)
+        {
+            if (u1 - u0 < 0.001f || h1 - h0 < 0.001f) return;
+            Func<float, float, Vector3> at = (u, h) => new Vector3(a.X + (b.X - a.X) * u, ga + (gb - ga) * u + h, a.Y + (b.Y - a.Y) * u);
+            var inward = -normal * RevealDepth;
+            var along = new Vector3(b.X - a.X, 0, b.Y - a.Y);
+            float t0 = ua + (ub - ua) * u0, t1 = ua + (ub - ua) * u1, dv = RevealDepth * 0.96f / StoreyHeight;
+            float v0 = SideV(h0, sideTop), v1 = SideV(h1, sideTop);
+            //the top (facing down), the sill (up), and the ends (facing each other)
+            RevealQuad(sink, pattern, at(u0, h1), at(u1, h1), at(u1, h1) + inward, at(u0, h1) + inward, Vector3.Down,
+                new Vector2(t0, v1), new Vector2(t1, v1), new Vector2(t1, v1 - dv), new Vector2(t0, v1 - dv));
+            RevealQuad(sink, pattern, at(u0, h0), at(u1, h0), at(u1, h0) + inward, at(u0, h0) + inward, Vector3.Up,
+                new Vector2(t0, v0), new Vector2(t1, v0), new Vector2(t1, v0 + dv), new Vector2(t0, v0 + dv));
+            RevealQuad(sink, pattern, at(u0, h0), at(u0, h1), at(u0, h1) + inward, at(u0, h0) + inward, along,
+                new Vector2(t0, v0), new Vector2(t0, v1), new Vector2(t0 + RevealDepth, v1), new Vector2(t0 + RevealDepth, v0));
+            RevealQuad(sink, pattern, at(u1, h0), at(u1, h1), at(u1, h1) + inward, at(u1, h0) + inward, -along,
+                new Vector2(t1, v0), new Vector2(t1, v1), new Vector2(t1 - RevealDepth, v1), new Vector2(t1 - RevealDepth, v0));
+        }
+
+        /// <summary>A quad of a hole's lining, wound as the sides are for its facing (<paramref name="normal"/>).</summary>
+        private static void RevealQuad(QuadSink sink, ushort pattern, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal,
+            Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3)
+        {
+            //(a side's corners go so that (p1 - p0) x (p3 - p0) faces away from its facing)
+            if (Vector3.Dot(Vector3.Cross(p1 - p0, p3 - p0), normal) > 0)
+                sink(FoundationMaterial.Covering, pattern, p0, p3, p2, p1, normal, uv0, uv3, uv2, uv1);
+            else
+                sink(FoundationMaterial.Covering, pattern, p0, p1, p2, p3, normal, uv0, uv1, uv2, uv3);
         }
 
         private static float SideV(float height, float sideTop)
