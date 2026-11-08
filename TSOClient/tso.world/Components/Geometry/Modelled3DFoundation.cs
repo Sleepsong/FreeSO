@@ -230,9 +230,6 @@ namespace FSO.LotView.Components.Geometry
             for (int dir = 0; dir < 4; dir++)
             {
                 if (!Capped(map, x, y, dir)) continue;
-                //over a basement, a wall of its own on this side stands in front of it (and a window in it would show this
-                //through its opening)
-                if (Bp.Basement?.IsDug(x, y) == true && Modelled3DBasement.BasementWallOn(Bp, x, y, dir)) continue;
                 var d = FoundationMap.Directions[dir];
                 EdgeEnds(x, y, dir, out var a, out var b);
                 var ga = GroundAt(a);
@@ -252,11 +249,27 @@ namespace FSO.LotView.Components.Geometry
                                 new Vector3(b.X, gb + underBand, b.Y), new Vector3(a.X, ga + underBand, a.Y), normal,
                                 new Vector2(ua, -bottom), new Vector2(ub, -bottom), new Vector2(ub, -underBand), new Vector2(ua, -underBand));
                         else
-                            sink(FoundationMaterial.Covering, map.SideOf(x, y, dir),
-                                new Vector3(a.X, ga + bottom, a.Y), new Vector3(b.X, gb + bottom, b.Y),
-                                new Vector3(b.X, gb + underBand, b.Y), new Vector3(a.X, ga + underBand, a.Y), normal,
-                                new Vector2(ua, SideV(bottom, underBand)), new Vector2(ub, SideV(bottom, underBand)),
-                                new Vector2(ub, SideV(underBand, underBand)), new Vector2(ua, SideV(underBand, underBand)));
+                        {
+                            //cut round a basement window's opening, where a basement under it has one in a wall on this side
+                            var pattern = map.SideOf(x, y, dir);
+                            var opening = BasementWindowOn(x, y, dir);
+                            float holeBottom = 0, holeTop = 0;
+                            if (opening != null)
+                            {
+                                holeTop = Math.Min(underBand, raise - opening.Value.Top * 2.95f);
+                                holeBottom = Math.Max(bottom, raise - opening.Value.Bottom * 2.95f);
+                            }
+                            if (opening == null || holeTop - holeBottom < 0.01f)
+                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, bottom, underBand, ua, ub, normal, underBand);
+                            else
+                            {
+                                float u0 = Math.Max(0, Math.Min(1, opening.Value.Left)), u1 = Math.Max(u0, Math.Min(1, opening.Value.Right));
+                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, bottom, holeBottom, ua, ub, normal, underBand);
+                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, 1, holeTop, underBand, ua, ub, normal, underBand);
+                                CoveringPiece(sink, pattern, a, b, ga, gb, 0, u0, holeBottom, holeTop, ua, ub, normal, underBand);
+                                CoveringPiece(sink, pattern, a, b, ga, gb, u1, 1, holeBottom, holeTop, ua, ub, normal, underBand);
+                            }
+                        }
                     }
                 }
 
@@ -284,6 +297,45 @@ namespace FSO.LotView.Components.Geometry
         /// The texture's v on a foundation's side: a wall covering's middle (where it has no skirting or trim), its top
         /// at the foundation's top.
         /// </summary>
+        /// <summary>
+        /// The opening of a window in a basement wall on a foundation tile's side (see <see cref="WallOpening"/>), where the
+        /// basement under it has one: the foundation's side is cut to show it. Null for none (or a door).
+        /// </summary>
+        private WallOpening? BasementWindowOn(int x, int y, int dir)
+        {
+            if (Bp.Basement?.IsDug(x, y) != true) return null;
+            var walls = Bp.Walls?[-1];
+            if (walls == null) return null;
+            //a tile's walls are its -x side (top left) and -y side (top right); its +x and +y sides are its neighbours'
+            int wx = x, wy = y;
+            bool topLeft;
+            switch (dir)
+            {
+                case 0: topLeft = false; break;
+                case 1: wx = x + 1; topLeft = true; break;
+                case 2: wy = y + 1; topLeft = false; break;
+                default: topLeft = true; break;
+            }
+            if (wx < 0 || wy < 0 || wx >= Bp.Width || wy >= Bp.Height) return null;
+            var wall = walls[wy * Bp.Width + wx];
+            if ((wall.Segments & (topLeft ? WallSegments.TopLeft : WallSegments.TopRight)) == 0) return null;
+            if (topLeft ? wall.TopLeftDoor : wall.TopRightDoor) return null;
+            var style = topLeft ? wall.ObjSetTLStyle : wall.ObjSetTRStyle;
+            if (style == 0) return null;
+            return WallOpening.OfStyle(style);
+        }
+
+        /// <summary>A piece of a side's covering: from <paramref name="u0"/> to <paramref name="u1"/> along it, <paramref name="h0"/> to <paramref name="h1"/> up it.</summary>
+        private static void CoveringPiece(QuadSink sink, ushort pattern, Point a, Point b, float ga, float gb, float u0, float u1, float h0, float h1,
+            float ua, float ub, Vector3 normal, float sideTop)
+        {
+            if (u1 - u0 < 0.001f || h1 - h0 < 0.001f) return;
+            Func<float, float, Vector3> at = (u, h) => new Vector3(a.X + (b.X - a.X) * u, ga + (gb - ga) * u + h, a.Y + (b.Y - a.Y) * u);
+            float t0 = ua + (ub - ua) * u0, t1 = ua + (ub - ua) * u1;
+            sink(FoundationMaterial.Covering, pattern, at(u0, h0), at(u1, h0), at(u1, h1), at(u0, h1), normal,
+                new Vector2(t0, SideV(h0, sideTop)), new Vector2(t1, SideV(h0, sideTop)), new Vector2(t1, SideV(h1, sideTop)), new Vector2(t0, SideV(h1, sideTop)));
+        }
+
         private static float SideV(float height, float sideTop)
         {
             return 0.45f + ((sideTop - height) / StoreyHeight) * 0.96f;

@@ -1197,7 +1197,9 @@ namespace FSO.SimAntics
         {
             if (pos == LotTilePos.OUT_OF_WORLD) return new VMPlacementResult();
             var userOOB = context.IsUserOutOfBounds(pos);
-            if ((((flags & VMPlaceRequestFlags.UserBuildableLimit) > 0) && userOOB) || context.IsOutOfBounds(pos))
+            //a window or door in the basement's edge may have a part in the earth beside it (outside its wall)
+            var basementWall = pos.Level == 0 && Utils.VMBasementWindows.InWall(this) && context.Architecture.BasementNear(pos.TileX, pos.TileY);
+            if (!basementWall && ((((flags & VMPlaceRequestFlags.UserBuildableLimit) > 0) && userOOB) || context.IsOutOfBounds(pos)))
                 return new VMPlacementResult(VMPlacementError.LocationOutOfBounds);
 
             //TODO: speedup with exit early checks
@@ -1223,7 +1225,8 @@ namespace FSO.SimAntics
             VMPlacementError floorValid = FloorChangeValid(floor, pos.Level);
             if (floorValid != VMPlacementError.Success) return new VMPlacementResult(floorValid);
 
-            if (!userOOB && arch.GetTerrainSloped(pos.TileX, pos.TileY)) //sloped
+            //(the basement's floor counts as flat: the ground's slope is above it)
+            if (!userOOB && pos.Level != 0 && arch.GetTerrainSloped(pos.TileX, pos.TileY)) //sloped
             {
                 var slopeValid = SlopeValid();
                 if (slopeValid != VMPlacementError.Success) return new VMPlacementResult(slopeValid);

@@ -47,6 +47,41 @@ namespace FSO.LotView.RC
             new Vector2(1,-1)
         };
 
+        /// <summary>
+        /// Whether a wall face (from, to: relative to tile x, y) is on the basement's edge where a foundation lifts it above the
+        /// ground outside: <paramref name="exterior"/> if it faces the earth, and <paramref name="above"/> how much of the
+        /// storey is above that ground. Only the long faces of straight walls (not their end caps, or diagonals).
+        /// </summary>
+        private bool BasementEdgeFace(int x, int y, Vector2 from, Vector2 to, out bool exterior, out float above)
+        {
+            exterior = false;
+            above = 0;
+            var map = blueprint.Basement;
+            var fnd = blueprint.Foundations;
+            if (map == null || !map.Any || fnd == null || !fnd.Any) return false;
+            if ((to - from).Length() < 0.5f) return false;
+            Point side, other;
+            if (Math.Abs(from.X - to.X) < 0.001f) //a top left wall: between (x-1, y) and (x, y)
+            {
+                side = new Point((from.X < 0) ? x - 1 : x, y);
+                other = new Point((from.X < 0) ? x : x - 1, y);
+            }
+            else if (Math.Abs(from.Y - to.Y) < 0.001f) //a top right wall: between (x, y-1) and (x, y)
+            {
+                side = new Point(x, (from.Y < 0) ? y - 1 : y);
+                other = new Point(x, (from.Y < 0) ? y : y - 1);
+            }
+            else return false;
+            bool sideDug = map.IsDug(side.X, side.Y), otherDug = map.IsDug(other.X, other.Y);
+            if (sideDug == otherDug) return false;
+            var dug = sideDug ? side : other;
+            var earth = sideDug ? other : side;
+            above = (fnd.RaiseOf(dug.X, dug.Y) - fnd.RaiseOf(earth.X, earth.Y)) * blueprint.TerrainFactor / 2.95f;
+            if (above <= 0) return false;
+            exterior = !sideDug;
+            return true;
+        }
+
         private bool HasRoof(int x, int y, int level)
         {
             return !TileIndoors(x, y, level) && TileIndoors(x, y, level - 1);
@@ -133,11 +168,24 @@ namespace FSO.LotView.RC
                     var baseI = g.Verts.Count;
                     var h1 = (topMode == 4) ? 0.98f : GetWallHeight(p1);
                     var h2 = (topMode == 4) ? 0.98f : GetWallHeight(p2);
+                    //the basement's walls on its edge, where a foundation lifts it above the ground outside: outside, they stop
+                    //at the ground (the foundation's own side is above, as the house shows it), and their top's only inside
+                    float fh1 = h1, fh2 = h2, capFrom = 0, capTo = 1;
+                    if (level == 0 && BasementEdgeFace(x, y, from, to, out var exterior, out var above))
+                    {
+                        if (exterior)
+                        {
+                            fh1 = Math.Min(h1, 1 - above);
+                            fh2 = Math.Min(h2, 1 - above);
+                            capFrom = 0.5f;
+                        }
+                        else capTo = 0.5f;
+                    }
                     var col = (from.X == to.X) ? darker : white;
                     g.Verts.Add(new WallVertexRC(p1, col, new Vector3(starttc, l, aboveFloor)));
                     g.Verts.Add(new WallVertexRC(p2, col, new Vector3(endtc, l, aboveFloor)));
-                    g.Verts.Add(new WallVertexRC(p1 + wallHeight * h1, col, new Vector3(starttc, h1 + l, aboveFloor)));
-                    g.Verts.Add(new WallVertexRC(p2 + wallHeight * h2, col, new Vector3(endtc, h2 + l, aboveFloor)));
+                    g.Verts.Add(new WallVertexRC(p1 + wallHeight * fh1, col, new Vector3(starttc, fh1 + l, aboveFloor)));
+                    g.Verts.Add(new WallVertexRC(p2 + wallHeight * fh2, col, new Vector3(endtc, fh2 + l, aboveFloor)));
 
                     g.Indices.Add(baseI); g.Indices.Add(baseI + 2); g.Indices.Add(baseI + 1);
                     g.Indices.Add(baseI + 2); g.Indices.Add(baseI + 3); g.Indices.Add(baseI + 1);
@@ -167,10 +215,10 @@ namespace FSO.LotView.RC
 
                         var vec = new Vector2(0, 1 + l);
                         h1 -= 0.001f; h2 -= 0.001f;
-                        g2.Verts.Add(new WallVertexRC(p1 + wallHeight * h1, wallTop, new Vector3(0, h1 + l, aboveFloor)));
-                        g2.Verts.Add(new WallVertexRC(p2 + wallHeight * h2, wallTop, new Vector3(0, h2 + l, aboveFloor)));
-                        g2.Verts.Add(new WallVertexRC(p1 + wallHeight * h1 + toBack, wallTop, new Vector3(0, h1 + l, aboveFloor)));
-                        g2.Verts.Add(new WallVertexRC(p2 + wallHeight * h2 + toBack, wallTop, new Vector3(0, h2 + l, aboveFloor)));
+                        g2.Verts.Add(new WallVertexRC(p1 + wallHeight * h1 + toBack * capFrom, wallTop, new Vector3(0, h1 + l, aboveFloor)));
+                        g2.Verts.Add(new WallVertexRC(p2 + wallHeight * h2 + toBack * capFrom, wallTop, new Vector3(0, h2 + l, aboveFloor)));
+                        g2.Verts.Add(new WallVertexRC(p1 + wallHeight * h1 + toBack * capTo, wallTop, new Vector3(0, h1 + l, aboveFloor)));
+                        g2.Verts.Add(new WallVertexRC(p2 + wallHeight * h2 + toBack * capTo, wallTop, new Vector3(0, h2 + l, aboveFloor)));
 
                         g2.Indices.Add(baseI); g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 1);
                         g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 3); g2.Indices.Add(baseI + 1);
