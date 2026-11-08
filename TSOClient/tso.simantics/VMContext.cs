@@ -1066,7 +1066,7 @@ namespace FSO.SimAntics
 
         public bool CheckWallValid(LotTilePos pos, WallTile wall)
         {
-            if (wall.Segments > 0 && Architecture.GetTerrainSloped(pos.TileX, pos.TileY)) return false;
+            if (wall.Segments > 0 && pos.Level != 0 && Architecture.GetTerrainSloped(pos.TileX, pos.TileY)) return false; //(not the basement's)
             var objs = ObjectQueries.GetObjectsAt(pos);
             if (objs == null) return true;
             foreach (var obj in objs)

@@ -1,4 +1,4 @@
-using FSO.Files.Formats.IFF.Chunks;
+﻿using FSO.Files.Formats.IFF.Chunks;
 using FSO.LotView.Model;
 using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
@@ -27,6 +27,12 @@ namespace FSO.SimAntics.Utils
         public static bool IsWindow(VMEntity entity)
         {
             return ((VMEntityFlags2)entity.GetValue(VMStackObjectVariable.FlagField2) & VMEntityFlags2.ArchitectualWindow) > 0;
+        }
+
+        /// <summary>A window or door: it's in a wall, and stands as high as the wall does.</summary>
+        public static bool InWall(VMEntity entity)
+        {
+            return ((VMEntityFlags2)entity.GetValue(VMStackObjectVariable.FlagField2) & (VMEntityFlags2.ArchitectualWindow | VMEntityFlags2.ArchitectualDoor)) > 0;
         }
 
         /// <summary>The tile across a tile's side (0 top right: -y, 1 bottom right: +x, 2 bottom left: +y, 3 top left: -x).</summary>
@@ -181,34 +187,10 @@ namespace FSO.SimAntics.Utils
             return spr.Frames[0];
         }
 
-        /// <summary>
-        /// The deepest a wall mask's hole goes, as a fraction of the wall down from its top: per column, the wall is where the
-        /// mask's opaque, and the hole is the see-through between its top and bottom.
-        /// </summary>
+        /// <summary>The deepest a wall mask's hole goes, as a fraction of the wall down from its top (1 if there's none: see <see cref="WallOpening"/>).</summary>
         public static float MeasureOpening(SPRFrame frame)
         {
-            if (frame == null) return 1;
-            frame.DecodeIfRequired();
-            float deepest = 0;
-            bool any = false;
-            for (int x = 0; x < frame.Width; x++)
-            {
-                int top = -1, bottom = -1;
-                for (int y = 0; y < frame.Height; y++)
-                {
-                    if (frame.GetPixel(x, y).A == 0) continue;
-                    if (top < 0) top = y;
-                    bottom = y;
-                }
-                if (top < 0 || bottom - top < frame.Height / 4) continue; //(an edge of the wall, or nothing)
-                for (int y = top; y <= bottom; y++)
-                {
-                    if (frame.GetPixel(x, y).A != 0) continue;
-                    any = true;
-                    deepest = Math.Max(deepest, (y - top) / (float)(bottom - top));
-                }
-            }
-            return any ? deepest : 1;
+            return WallOpening.Measure(frame)?.Bottom ?? 1;
         }
 
         private static bool? Logs;

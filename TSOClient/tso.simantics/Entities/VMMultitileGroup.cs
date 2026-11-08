@@ -202,7 +202,9 @@ namespace FSO.SimAntics.Entities
             var offTotal = new Vector3();
 
             //a multitile object can't straddle a foundation's edge (or its steps): all of it stands at one height
-            if (pos != LotTilePos.OUT_OF_WORLD && count > 1 && !StraddlesNothing(pos, rotMat, leadOff, context))
+            //(not a window or door in the basement, on its edge under a foundation: its parts stand at its wall's height)
+            if (pos != LotTilePos.OUT_OF_WORLD && count > 1 && !(pos.Level == 0 && Utils.VMBasementWindows.InWall(BaseObject))
+                && !StraddlesNothing(pos, rotMat, leadOff, context))
                 return new VMPlacementResult(VMPlacementError.CantPlaceOnSlope);
             
             if (pos != LotTilePos.OUT_OF_WORLD)
