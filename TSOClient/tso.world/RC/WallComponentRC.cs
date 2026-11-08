@@ -51,38 +51,52 @@ namespace FSO.LotView.RC
         };
 
         /// <summary>
-        /// Whether a wall face (from, to: relative to tile x, y) is on the basement's edge where a foundation lifts it above the
-        /// ground outside: <paramref name="exterior"/> if it faces the earth, and <paramref name="above"/> how much of the
-        /// storey is above that ground. Only the long faces of straight walls (not their end caps, or diagonals).
+        /// Whether a basement (level 0) wall's pieces get cut down at the ground outside: a foundation lifts some of the
+        /// basement above the ground outside it (see <see cref="EarthAbove(Blueprint, Vector2)"/>).
         /// </summary>
-        private bool BasementEdgeFace(int x, int y, Vector2 from, Vector2 to, out bool exterior, out float above)
+        private bool BasementRaised()
         {
-            exterior = false;
-            above = 0;
             var map = blueprint.Basement;
             var fnd = blueprint.Foundations;
-            if (map == null || !map.Any || fnd == null || !fnd.Any) return false;
-            if ((to - from).Length() < 0.5f) return false;
-            Point side, other;
-            if (Math.Abs(from.X - to.X) < 0.001f) //a top left wall: between (x-1, y) and (x, y)
+            return map != null && map.Any && fnd != null && fnd.Any;
+        }
+
+        /// <summary>
+        /// For a point of a basement wall (lot tiles, across the ground): 0 if it's over the basement; if it's outside it (a
+        /// wall on the basement's edge is half outside, and its ends and corners reach out past the edge), how much of the
+        /// storey is above the ground there, from the foundation lifting the basement beside it.
+        /// </summary>
+        public static float EarthAbove(Blueprint blueprint, Vector2 p)
+        {
+            var map = blueprint.Basement;
+            var fnd = blueprint.Foundations;
+            int tx = (int)Math.Floor(p.X), ty = (int)Math.Floor(p.Y);
+            if (map.IsDug(tx, ty)) return 0;
+            int most = 0;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    if ((dx != 0 || dy != 0) && map.IsDug(tx + dx, ty + dy))
+                        most = Math.Max(most, fnd.RaiseOf(tx + dx, ty + dy) - fnd.RaiseOf(tx, ty));
+            return most * blueprint.TerrainFactor / 2.95f;
+        }
+
+        /// <summary>Where a line (lot tiles) from a to b crosses tile edges, 0 to 1 along it, with its ends: it's cut there.</summary>
+        public static List<float> TileCuts(Vector2 a, Vector2 b)
+        {
+            var result = new List<float> { 0, 1 };
+            Action<float, float> cross = (from, to) =>
             {
-                side = new Point((from.X < 0) ? x - 1 : x, y);
-                other = new Point((from.X < 0) ? x : x - 1, y);
-            }
-            else if (Math.Abs(from.Y - to.Y) < 0.001f) //a top right wall: between (x, y-1) and (x, y)
-            {
-                side = new Point(x, (from.Y < 0) ? y - 1 : y);
-                other = new Point(x, (from.Y < 0) ? y : y - 1);
-            }
-            else return false;
-            bool sideDug = map.IsDug(side.X, side.Y), otherDug = map.IsDug(other.X, other.Y);
-            if (sideDug == otherDug) return false;
-            var dug = sideDug ? side : other;
-            var earth = sideDug ? other : side;
-            above = (fnd.RaiseOf(dug.X, dug.Y) - fnd.RaiseOf(earth.X, earth.Y)) * blueprint.TerrainFactor / 2.95f;
-            if (above <= 0) return false;
-            exterior = !sideDug;
-            return true;
+                if (Math.Abs(to - from) < 0.0001f) return;
+                for (var edge = Math.Ceiling(Math.Min(from, to)); edge < Math.Max(from, to); edge++)
+                {
+                    var t = (float)((edge - from) / (to - from));
+                    if (t > 0.001f && t < 0.999f) result.Add(t);
+                }
+            };
+            cross(a.X, b.X);
+            cross(a.Y, b.Y);
+            result.Sort();
+            return result;
         }
 
         private bool HasRoof(int x, int y, int level)
@@ -113,6 +127,7 @@ namespace FSO.LotView.RC
             var thickness = 0.15f/2;
             var thickDiag = thickness;
             var xz = CutCheckDir[(int)world.CutRotation] * 0.66f;
+            var raisedBasement = BasementRaised();
             if (float.IsNaN(xz.X)) xz = new Vector2();
 
             //draw walls: the basement (level 0) and up
@@ -188,36 +203,42 @@ namespace FSO.LotView.RC
 
                     //generate the geometry for this line
                     var l = level - 1;
-                    var baseI = g.Verts.Count;
                     var h1 = (topMode == 4) ? 0.98f : GetWallHeight(p1);
                     var h2 = (topMode == 4) ? 0.98f : GetWallHeight(p2);
-                    //the basement's walls on its edge, where a foundation lifts it above the ground outside: outside, they stop
-                    //at the ground (the foundation's own side is above, as the house shows it), and their top's only inside
-                    float fh1 = h1, fh2 = h2, capFrom = 0, capTo = 1;
-                    if (level == 0 && BasementEdgeFace(x, y, from, to, out var exterior, out var above))
-                    {
-                        if (exterior)
-                        {
-                            fh1 = Math.Min(h1, 1 - above);
-                            fh2 = Math.Min(h2, 1 - above);
-                            capFrom = 0.5f;
-                        }
-                        else capTo = 0.5f;
-                    }
+                    //the basement's walls where a foundation lifts it above the ground outside: what's of them outside the
+                    //basement (the outside face of one on its edge, the ends and corners reaching past it) stops at the
+                    //ground there, and their tops are only over the basement: the foundation's own side shows above, as the
+                    //house shows it. Pieces cross tiles at their edges, so they're cut there.
+                    var clip = raisedBasement && level == 0 && topMode != 4;
+                    var lineFrom = from + new Vector2(x, y);
+                    var lineTo = to + new Vector2(x, y);
+                    var cuts = clip ? TileCuts(lineFrom, lineTo) : new List<float> { 0, 1 };
                     var col = (from.X == to.X) ? darker : white;
-                    g.Verts.Add(new WallVertexRC(p1, col, new Vector3(starttc, l, aboveFloor)));
-                    g.Verts.Add(new WallVertexRC(p2, col, new Vector3(endtc, l, aboveFloor)));
-                    g.Verts.Add(new WallVertexRC(p1 + wallHeight * fh1, col, new Vector3(starttc, fh1 + l, aboveFloor)));
-                    g.Verts.Add(new WallVertexRC(p2 + wallHeight * fh2, col, new Vector3(endtc, fh2 + l, aboveFloor)));
+                    for (int i = 0; i + 1 < cuts.Count; i++)
+                    {
+                        float s0 = cuts[i], s1 = cuts[i + 1];
+                        var above = clip ? EarthAbove(blueprint, Vector2.Lerp(lineFrom, lineTo, (s0 + s1) / 2)) : 0;
+                        var k1 = Math.Min(MathHelper.Lerp(h1, h2, s0), 1 - above);
+                        var k2 = Math.Min(MathHelper.Lerp(h1, h2, s1), 1 - above);
+                        if (k1 <= 0 && k2 <= 0) continue;
+                        var q1 = Vector3.Lerp(p1, p2, s0);
+                        var q2 = Vector3.Lerp(p1, p2, s1);
+                        var tc1 = MathHelper.Lerp(starttc, endtc, s0);
+                        var tc2 = MathHelper.Lerp(starttc, endtc, s1);
+                        var baseI = g.Verts.Count;
+                        g.Verts.Add(new WallVertexRC(q1, col, new Vector3(tc1, l, aboveFloor)));
+                        g.Verts.Add(new WallVertexRC(q2, col, new Vector3(tc2, l, aboveFloor)));
+                        g.Verts.Add(new WallVertexRC(q1 + wallHeight * k1, col, new Vector3(tc1, k1 + l, aboveFloor)));
+                        g.Verts.Add(new WallVertexRC(q2 + wallHeight * k2, col, new Vector3(tc2, k2 + l, aboveFloor)));
 
-                    g.Indices.Add(baseI); g.Indices.Add(baseI + 2); g.Indices.Add(baseI + 1);
-                    g.Indices.Add(baseI + 2); g.Indices.Add(baseI + 3); g.Indices.Add(baseI + 1);
+                        g.Indices.Add(baseI); g.Indices.Add(baseI + 2); g.Indices.Add(baseI + 1);
+                        g.Indices.Add(baseI + 2); g.Indices.Add(baseI + 3); g.Indices.Add(baseI + 1);
+                    }
 
                     if (topMode < 4)
                     {
                         var g2 = Fetch(whitepx, whitepx, 0, grp);
 
-                        baseI = g2.Verts.Count;
                         Vector3 toBack = Vector3.Zero;
 
                         switch (topMode)
@@ -236,15 +257,31 @@ namespace FSO.LotView.RC
                                 break;
                         }
 
-                        var vec = new Vector2(0, 1 + l);
                         h1 -= 0.001f; h2 -= 0.001f;
-                        g2.Verts.Add(new WallVertexRC(p1 + wallHeight * h1 + toBack * capFrom, wallTop, new Vector3(0, h1 + l, aboveFloor)));
-                        g2.Verts.Add(new WallVertexRC(p2 + wallHeight * h2 + toBack * capFrom, wallTop, new Vector3(0, h2 + l, aboveFloor)));
-                        g2.Verts.Add(new WallVertexRC(p1 + wallHeight * h1 + toBack * capTo, wallTop, new Vector3(0, h1 + l, aboveFloor)));
-                        g2.Verts.Add(new WallVertexRC(p2 + wallHeight * h2 + toBack * capTo, wallTop, new Vector3(0, h2 + l, aboveFloor)));
+                        //(clipped: its halves either side of the wall's middle, a tile at a time)
+                        var across = clip ? new float[] { 0, 0.5f, 1 } : new float[] { 0, 1 };
+                        var back = new Vector2(toBack.X, toBack.Y);
+                        for (int i = 0; i + 1 < cuts.Count; i++)
+                        {
+                            float s0 = cuts[i], s1 = cuts[i + 1];
+                            for (int j = 0; j + 1 < across.Length; j++)
+                            {
+                                float c0 = across[j], c1 = across[j + 1];
+                                if (clip && EarthAbove(blueprint, Vector2.Lerp(lineFrom, lineTo, (s0 + s1) / 2) + back * ((c0 + c1) / 2)) > 0) continue;
+                                var k1 = MathHelper.Lerp(h1, h2, s0);
+                                var k2 = MathHelper.Lerp(h1, h2, s1);
+                                var q1 = Vector3.Lerp(p1, p2, s0) + wallHeight * k1;
+                                var q2 = Vector3.Lerp(p1, p2, s1) + wallHeight * k2;
+                                var baseI = g2.Verts.Count;
+                                g2.Verts.Add(new WallVertexRC(q1 + toBack * c0, wallTop, new Vector3(0, k1 + l, aboveFloor)));
+                                g2.Verts.Add(new WallVertexRC(q2 + toBack * c0, wallTop, new Vector3(0, k2 + l, aboveFloor)));
+                                g2.Verts.Add(new WallVertexRC(q1 + toBack * c1, wallTop, new Vector3(0, k1 + l, aboveFloor)));
+                                g2.Verts.Add(new WallVertexRC(q2 + toBack * c1, wallTop, new Vector3(0, k2 + l, aboveFloor)));
 
-                        g2.Indices.Add(baseI); g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 1);
-                        g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 3); g2.Indices.Add(baseI + 1);
+                                g2.Indices.Add(baseI); g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 1);
+                                g2.Indices.Add(baseI + 2); g2.Indices.Add(baseI + 3); g2.Indices.Add(baseI + 1);
+                            }
+                        }
                     }
                 };
 
