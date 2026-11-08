@@ -1210,6 +1210,13 @@ namespace FSO.SimAntics
             {
                 VMPlacementError wallValid = WallChangeValid(wall, direction, true);
                 if (wallValid != VMPlacementError.Success) return new VMPlacementResult(wallValid);
+                //windows on the basement's edge: high ones, where a foundation lifts it above the ground (for the user: none
+                //put in before the rule are moved)
+                if ((flags & VMPlaceRequestFlags.UserBuildableLimit) > 0)
+                {
+                    var basementWindow = Utils.VMBasementWindows.Check(this, pos, direction, context);
+                    if (basementWindow != VMPlacementError.Success) return new VMPlacementResult(basementWindow);
+                }
             }
 
             var floor = arch.GetPreciseFloor(pos);
