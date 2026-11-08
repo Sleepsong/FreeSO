@@ -230,6 +230,9 @@ namespace FSO.LotView.Components.Geometry
             for (int dir = 0; dir < 4; dir++)
             {
                 if (!Capped(map, x, y, dir)) continue;
+                //over a basement, a wall of its own on this side stands in front of it (and a window in it would show this
+                //through its opening)
+                if (Bp.Basement?.IsDug(x, y) == true && Modelled3DBasement.BasementWallOn(Bp, x, y, dir)) continue;
                 var d = FoundationMap.Directions[dir];
                 EdgeEnds(x, y, dir, out var a, out var b);
                 var ga = GroundAt(a);

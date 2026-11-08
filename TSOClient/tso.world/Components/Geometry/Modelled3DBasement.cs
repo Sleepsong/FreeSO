@@ -59,23 +59,26 @@ namespace FSO.LotView.Components.Geometry
         /// Whether a wall stands on a dug tile's side toward <paramref name="dir"/>: the earth there is behind it, so isn't
         /// drawn (it would show through the wall, in 2D especially).
         /// </summary>
-        private bool WallOnEdge(int x, int y, int dir)
+        private bool WallOnEdge(int x, int y, int dir) => BasementWallOn(Bp, x, y, dir);
+
+        /// <summary>Whether a basement (level 0) wall stands on a tile's side toward <paramref name="dir"/> (see <see cref="BasementMap.Directions"/>).</summary>
+        public static bool BasementWallOn(Blueprint bp, int x, int y, int dir)
         {
             //a tile's walls are its -x side (TopLeft) and its -y side (TopRight); its +x and +y sides are its neighbours'
             switch (dir)
             {
-                case 0: return WallAt(x, y, WallSegments.TopRight);
-                case 1: return WallAt(x + 1, y, WallSegments.TopLeft);
-                case 2: return WallAt(x, y + 1, WallSegments.TopRight);
-                default: return WallAt(x, y, WallSegments.TopLeft);
+                case 0: return WallAt(bp, x, y, WallSegments.TopRight);
+                case 1: return WallAt(bp, x + 1, y, WallSegments.TopLeft);
+                case 2: return WallAt(bp, x, y + 1, WallSegments.TopRight);
+                default: return WallAt(bp, x, y, WallSegments.TopLeft);
             }
         }
 
-        private bool WallAt(int x, int y, WallSegments segment)
+        private static bool WallAt(Blueprint bp, int x, int y, WallSegments segment)
         {
-            var walls = Bp.Walls?[-1];
-            if (walls == null || x < 0 || y < 0 || x >= Bp.Width || y >= Bp.Height) return false;
-            return (walls[y * Bp.Width + x].Segments & segment) != 0;
+            var walls = bp.Walls?[-1];
+            if (walls == null || x < 0 || y < 0 || x >= bp.Width || y >= bp.Height) return false;
+            return (walls[y * bp.Width + x].Segments & segment) != 0;
         }
 
         private float HeightAt(Point p)

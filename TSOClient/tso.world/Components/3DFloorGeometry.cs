@@ -188,8 +188,12 @@ namespace FSO.LotView.Components
         /// <summary>The basement's walls changed: its earth's sides are made again (they leave out the edges walls stand on).</summary>
         public void BasementWallsChanged(GraphicsDevice gd)
         {
+            if (Bp.Basement == null || !Bp.Basement.Any) return;
             foreach (var group in Floors[LevelArray<int>.MinIndex].FoundationGroups)
                 if (group is Modelled3DBasement) group.PrepareGPU(gd);
+            //and foundations' sides over it (they're left out where the basement's walls stand in front of them)
+            if (Bp.Foundations != null && Bp.Foundations.Any)
+                foreach (var group in Floors[0].FoundationGroups) group.PrepareGPU(gd);
         }
 
         public void SliceReset(GraphicsDevice gd, Rectangle slice)
