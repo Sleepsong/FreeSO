@@ -1404,6 +1404,8 @@ namespace FSO.SimAntics
             var objDefinition = FSO.Content.Content.Get().WorldObjects.Get(GUID);
             if (objDefinition == null)
             {
+                if (Engine.VMTravelLog.Enabled) Engine.VMTravelLog.Write($"couldn't create object 0x{GUID:X8}: it isn't in the installed content" +
+                    Engine.VMTravelLog.Context());
                 return null;
             }
 

@@ -113,6 +113,8 @@ namespace FSO.SimAntics
         public GameGlobalResource SemiGlobal;
         public TTAB TreeTable;
         public TTAs TreeTableStrings;
+        /// <summary>Lines of script trace this object's own thread may still write to the travel log (0: not traced). Not saved.</summary>
+        public int TraceBudget;
         public Dictionary<string, VMTreeByNameTableEntry> TreeByName;
         public SLOT Slots;
         public OBJD MasterDefinition; //if this object is multitile, its master definition will be stored here.
