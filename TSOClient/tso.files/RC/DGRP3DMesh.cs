@@ -135,6 +135,11 @@ namespace FSO.Files.RC
         public string Name;
         public List<Dictionary<Texture2D, DGRP3DGeometry>> Geoms;
         public DGRP3DMaskType MaskType = DGRP3DMaskType.None;
+        /// <summary>
+        /// Textures a loaded FSOM couldn't find: the geometry using them isn't drawn, so the object is missing parts or
+        /// invisible. Filled in by CompleteFSOMLoad.
+        /// </summary>
+        public List<string> MissingTextures = new List<string>();
         public DGRP3DGeometry DepthMask;
         public BoundingBox? Bounds;
 
@@ -326,6 +331,10 @@ namespace FSO.Files.RC
                     if (geom.Pixel != null)
                     {
                         d.Add(geom.Pixel, geom);
+                    }
+                    else if (geom.PrimCount > 0)
+                    {
+                        MissingTextures.Add(geom.TextureName ?? ("sprite " + geom.PixelSPR + " of " + geom.PixelDir));
                     }
                 }
 

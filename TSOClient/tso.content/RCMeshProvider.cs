@@ -19,6 +19,20 @@ namespace FSO.Content
         public HashSet<string> CacheFiles;
         public HashSet<string> ReplaceFiles;
 
+        /// <summary>
+        /// Replacement meshes and textures (Content/MeshReplace, and MeshReplace in the user folder, which wins), by file
+        /// name in any case. The names asked for come from the game's own object file names, whose case varies between
+        /// installs, and Linux file names are case-sensitive: a remesh pack made on Windows would otherwise load its
+        /// meshes and miss their textures.
+        /// </summary>
+        private Dictionary<string, string> ReplacePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Notes about replacement meshes that couldn't be used, for a log (the frontend sets it, e.g. with -logs).
+        /// Each mesh is noted once.
+        /// </summary>
+        public static Action<string> Note;
+
         public RCMeshProvider(GraphicsDevice gd)
         {
             GD = gd;
@@ -26,7 +40,6 @@ namespace FSO.Content
 
             var repldir = Path.Combine(FSOEnvironment.ContentDir, "MeshReplace/");
             var userrepl = Path.Combine(FSOEnvironment.UserDir, "MeshReplace/");
-            if (Directory.Exists(userrepl)) repldir = userrepl;
             var dir = Path.Combine(FSOEnvironment.UserDir, "MeshCache/");
             try
             {
@@ -36,7 +49,21 @@ namespace FSO.Content
             {
             }
             CacheFiles = new HashSet<string>(Directory.GetFiles(dir).Select(x => Path.GetFileName(x).ToLowerInvariant()));
-            ReplaceFiles = new HashSet<string>(Directory.GetFiles(repldir).Select(x => Path.GetFileName(x).ToLowerInvariant()));
+            AddReplacements(repldir);
+            AddReplacements(userrepl);
+            ReplaceFiles = new HashSet<string>(ReplacePaths.Keys.Select(x => x.ToLowerInvariant()));
+        }
+
+        private void AddReplacements(string dir)
+        {
+            try
+            {
+                if (!Directory.Exists(dir)) return;
+                foreach (var file in Directory.GetFiles(dir)) ReplacePaths[Path.GetFileName(file)] = file;
+            }
+            catch
+            {
+            }
         }
         public Dictionary<DGRP, DGRP3DMesh> Cache = new Dictionary<DGRP, DGRP3DMesh>();
         public HashSet<DGRP> IgnoreRCCache = new HashSet<DGRP>();
@@ -52,14 +79,23 @@ namespace FSO.Content
             {
                 //does it exist in replacements
                 var name = obj.ChunkParent.Filename.Replace('.', '_').ToLowerInvariant() + "_" + dgrp.ChunkID + ".fsom";
-                if (ReplaceFiles.Contains(name))
+                if (ReplacePaths.TryGetValue(name, out var replPath))
                 {
                     try
                     {
-                        result = new DGRP3DMesh(dgrp, Path.Combine(repldir, name), GD);
+                        result = new DGRP3DMesh(dgrp, replPath, GD);
                     }
-                    catch (Exception)
+                    catch (Exception e)
                     {
+                        Note?.Invoke(name + " couldn't be read (" + e.Message + "); the object keeps its own look.");
+                        result = null;
+                    }
+                    //a replacement missing textures draws without those parts, or not at all: keep the object's own look
+                    //instead. (Loaded in the background, the textures aren't known yet; Simitone loads in the foreground.)
+                    if (result != null && AssetStreaming.LoadingType == AssetStreamingMode.None && result.MissingTextures.Count > 0)
+                    {
+                        Note?.Invoke(name + " is missing " + string.Join(", ", result.MissingTextures.Distinct())
+                            + " (looked for in MeshReplace); the object keeps its own look.");
                         result = null;
                     }
                 }
@@ -141,6 +177,7 @@ namespace FSO.Content
             var name = dgrp.ChunkParent.Filename.Replace('.', '_').ToLowerInvariant() + "_" + dgrp.ChunkID + ".fsom";
             var repldir = Path.Combine(FSOEnvironment.ContentDir, "MeshReplace/");
             ReplaceFiles.Add(name);
+            ReplacePaths[name] = Path.Combine(repldir, name);
             mesh.SaveDirectory = repldir;
             mesh.Save();
 
@@ -153,19 +190,15 @@ namespace FSO.Content
             // TODO: Could have load the same texture multiple times due to a race condition?
             if (!ReplacementTex.TryGetValue(name, out result))
             {
-                string dir;
+                string path;
                 if (name.StartsWith("FSO_"))
                 {
-                    dir = Path.Combine(FSOEnvironment.ContentDir, "3D/");
-                    name = name.Substring(4);
+                    path = Path.Combine(FSOEnvironment.ContentDir, "3D/", name.Substring(4));
                 }
-                else dir = Path.Combine(FSOEnvironment.ContentDir, "MeshReplace/");
-                //load from meshreplace folder
+                else if (!ReplacePaths.TryGetValue(name, out path)) path = null; //from the meshreplace folders, in any case
                 try
                 {
-                    var path = Path.Combine(dir, name);
-
-                    if (File.Exists(path))
+                    if (path != null && File.Exists(path))
                     {
                         result = new MTEX(File.OpenRead(path));
                     }
