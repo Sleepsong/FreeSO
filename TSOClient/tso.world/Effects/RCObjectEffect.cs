@@ -32,6 +32,10 @@ namespace FSO.LotView.Effects
         }
         public Matrix ViewProjection
         {
+            get
+            {
+                return pViewProjection?.GetValueMatrix() ?? Matrix.Identity;
+            }
             set
             {
                 pViewProjection?.SetValue(value);

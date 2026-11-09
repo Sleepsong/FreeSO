@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 using FSO.Files.RC;
 using FSO.LotView.Effects;
 using FSO.Common.Utils;
+using FSO.Common;
 
 namespace FSO.LotView.Utils
 {
@@ -302,8 +303,7 @@ namespace FSO.LotView.Utils
                     device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, geom.PrimCount);
 
                     device.DepthStencilState = (Mesh.MaskType == DGRP3DMaskType.Portal) ? DepthClear2Strict : DepthClear2;
-                    effect.CurrentTechnique.Passes[1].Apply();
-                    device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, geom.PrimCount);
+                    DrawDepthClearPass(device, effect, geom.PrimCount);
 
                     device.DepthStencilState = DepthStencilState.Default;
                     device.BlendState = BlendState.NonPremultiplied;
@@ -350,20 +350,48 @@ namespace FSO.LotView.Utils
                 if (geom.Verts != null)
                 {
                     effect.SetTechnique(RCObjectTechniques.DepthClear);
-                    effect.CurrentTechnique.Passes[1].Apply();
 
                     device.DepthStencilState = StencilClearOnly;
                     device.Indices = geom.Indices;
                     device.SetVertexBuffer(geom.Verts);
 
                     device.BlendState = NoColor;
-                    device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, geom.PrimCount);
+                    DrawDepthClearPass(device, effect, geom.PrimCount);
                     device.BlendState = BlendState.NonPremultiplied;
                 }
                 device.DepthStencilState = DepthStencilState.Default;
                 effect.SetTechnique(RCObjectTechniques.Draw);
             }
             if (Room == 65533) effect.SetTechnique(RCObjectTechniques.Draw);
+        }
+
+        /// <summary>
+        /// The depth clear technique's second pass: depth pushed to the far plane where the stencil marks it (behind a
+        /// depth mask: a window, a fireplace, a sink in a remesh pack). Its pixel shader writes gl_FragDepth, which phone
+        /// shaders (GLSL ES 1.00, FSOEnvironment.SoftwareDepth) don't have, so it doesn't compile there and the game stops
+        /// on the first such object. On phones the same geometry is drawn with the first pass's shader and a
+        /// view-projection whose depth equals its w, which puts every point just in front of the far plane: the GPU
+        /// writes the far depth instead of the shader.
+        /// </summary>
+        private static void DrawDepthClearPass(GraphicsDevice device, RCObjectEffect effect, int primCount)
+        {
+            if (!FSOEnvironment.SoftwareDepth)
+            {
+                effect.CurrentTechnique.Passes[1].Apply();
+                device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, primCount);
+                return;
+            }
+            const float nearlyFar = 0.99999f; //(z = w would sit exactly on the far plane, where it could be clipped)
+            var vp = effect.ViewProjection;
+            var far = vp;
+            far.M13 = vp.M14 * nearlyFar;
+            far.M23 = vp.M24 * nearlyFar;
+            far.M33 = vp.M34 * nearlyFar;
+            far.M43 = vp.M44 * nearlyFar;
+            effect.ViewProjection = far;
+            effect.CurrentTechnique.Passes[0].Apply();
+            device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, primCount);
+            effect.ViewProjection = vp; //(uploaded with the next pass applied)
         }
 
         public void DrawLMap(GraphicsDevice device, sbyte level, float yOff)
