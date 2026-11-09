@@ -63,6 +63,7 @@ namespace FSO.Client
             { "EdgeScroll", "true"},
             { "ShowFPS", "false"},
             { "FastDepth2D", "true"},
+            { "DualScreen", "true"},
             { "Lighting", "true"},
             { "FXVolume", "10"},
             { "MusicVolume", "10"},
@@ -141,6 +142,8 @@ namespace FSO.Client
         public bool ShowFPS { get; set; }
         /// <summary>Phones: draw the 2D view's depth in one pass where the GPU supports framebuffer fetch.</summary>
         public bool FastDepth2D { get; set; }
+        /// <summary>Devices with a second screen (the AYN Thor's bottom screen): the lot's controls go there.</summary>
+        public bool DualScreen { get; set; }
         public bool Lighting { get; set; }
         public byte FXVolume { get; set; }
         public byte MusicVolume { get; set; }
