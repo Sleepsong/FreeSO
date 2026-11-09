@@ -103,6 +103,8 @@ namespace FSO.HIT
             if (InterruptBlocker != null) return !Dead;
             if (EverHadOwners && Owners.Count == 0)
             {
+                FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + Name + "' stopped: its owner stopped its sounds or went away ("
+                    + ((Notes.Count == 0) ? "before playing anything" : "playing: " + AnyNoteActive()) + ").");
                 KillVocals();
                 Dead = true;
                 return false;
@@ -159,9 +161,23 @@ namespace FSO.HIT
                     {
                         while (true)
                         {
+                            var opcodeAt = PC;
                             var opcode = Src.Data[PC++];
                             if (opcode >= HITInterpreter.Instructions.Length) opcode = 0;
+                            if (HITInterpreter.Unimplemented.Contains(opcode))
+                                FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + Name + "' uses the sound instruction "
+                                    + HITInterpreter.Instructions[opcode].Method.Name + " (0x" + opcode.ToString("X2") + "), which does nothing here. Script bytes from "
+                                    + "0x" + (PC - 1).ToString("X") + ": " + BytesAt((int)PC - 1, 16) + " (before: " + BytesAt((int)PC - 9, 8) + ")");
                             var result = HITInterpreter.Instructions[opcode](this);
+                            if (PC < 16 && Src.Data.Length >= 4 && Src.Data[0] == 'H' && Src.Data[1] == 'I' && Src.Data[2] == 'T')
+                            {
+                                //the first 16 bytes are the file's header, not code: stop rather than run it
+                                FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + Name + "' jumped into its .hit file's header (to 0x" + PC.ToString("X")
+                                    + ") from " + HITInterpreter.Instructions[opcode].Method.Name + " at 0x" + opcodeAt.ToString("X") + ": "
+                                    + BytesAt((int)opcodeAt, 8) + ". It stops there.");
+                                ThreadDead = true;
+                                return true;
+                            }
                             if (result == HITResult.HALT) return true;
                             else if (result == HITResult.KILL)
                             {
@@ -170,8 +186,9 @@ namespace FSO.HIT
                             }
                         }
                     }
-                    catch (Exception)
+                    catch (Exception e)
                     {
+                        FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + (Name ?? "?") + "' stopped on an error (" + e.GetType().Name + ": " + e.Message + ").");
                         return false;
                     }
                 }
@@ -305,6 +322,7 @@ namespace FSO.HIT
         public int NoteOn()
         {
             var sound = audContent.GetSFX(Patch);
+            TraceNote(sound);
 
             if (sound != null)
             {
@@ -346,6 +364,7 @@ namespace FSO.HIT
         public int NoteLoop() //todo, make loop again.
         {
             var sound = audContent.GetSFX(Patch);
+            TraceNote(sound);
 
             if (sound != null)
             {
@@ -385,6 +404,43 @@ namespace FSO.HIT
         /// </summary>
         /// <param name="note">The note to check.</param>
         /// <returns>True if active, false if not.</returns>
+        /// <summary>Script bytes in hex, for notes about instructions that do nothing here.</summary>
+        private string BytesAt(int from, int count)
+        {
+            var parts = new List<string>();
+            for (int i = from; i < from + count; i++)
+            {
+                if (i >= 0 && i < Src.Data.Length) parts.Add(Src.Data[i].ToString("X2"));
+            }
+            return string.Join(" ", parts);
+        }
+
+        private void TraceNote(SoundEffect sound)
+        {
+            //a sound id with no sound file plays nothing, silently
+            if (Patch == null) FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + Name + "' asked for sound 0x"
+                + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ", which isn't in the sound data: nothing played.");
+            var trace = FSO.Content.TS1.TS1Audio.Trace;
+            if (trace == null) return;
+            if (Patch == null)
+            {
+                var hitlistID = ActiveTrack?.HitlistID ?? 0;
+                trace("  '" + Name + "' has no sound for 0x" + (ActiveTrack?.SoundID ?? 0).ToString("X8") + ": nothing played (track 0x"
+                    + (ActiveTrack?.TrackID ?? 0).ToString("X8") + ", hitlist 0x" + hitlistID.ToString("X8")
+                    + ((ActiveTrack?.HitlistLabel != null) ? " " + ActiveTrack.HitlistLabel : "")
+                    + ((hitlistID != 0) ? ", found " + ((audContent as FSO.Content.TS1.TS1Audio)?.HitlistSource(hitlistID, ResGroup) ?? "?")
+                        + ", " + (Hitlist?.IDs?.Count ?? 0) + " entries" : "") + ").");
+            }
+            else trace("  '" + Name + "' plays " + Patch.Filename + ((sound == null) ? " (couldn't load it)" : ""));
+        }
+
+        /// <summary>Whether any of its notes is playing (or about to), for the sound log.</summary>
+        public bool AnyNoteActive()
+        {
+            for (int i = 0; i < Notes.Count; i++) if (NoteActive(i)) return true;
+            return false;
+        }
+
         public bool NoteActive(int note)
         {
             if (note == -1 || note >= Notes.Count) return false;
@@ -415,6 +471,7 @@ namespace FSO.HIT
                 case 50:
                     var replacePatch = audContent.GetPatch((uint)value, ResGroup);
                     if (replacePatch != null) Patch = replacePatch; //river loop seems to try to load an invalid patch?
+                    else FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + Name + "' set its sound to 0x" + value.ToString("X8") + ", which isn't in the sound data.");
                     break;
             }
         }

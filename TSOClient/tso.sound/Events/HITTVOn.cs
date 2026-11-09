@@ -85,6 +85,7 @@ namespace FSO.HIT.Events
             Station = new string(new char[] { (char)(TrackID & 0xFF), (char)((TrackID>>8) & 0xFF), (char)((TrackID>>16) & 0xFF), (char)((TrackID>>24) & 0xFF) });
             var paths = Content.Content.Get().Audio.StationPaths;
             if (paths.ContainsKey(Station)) LoadStation(CleanPath(paths[Station]));
+            else FSO.Content.TS1.TS1Audio.NoteOnce("No TV station is known for track 0x" + TrackID.ToString("X8") + ".");
         }
 
         public HITTVOn(uint id, HITVM vm, bool IDMode)
@@ -123,6 +124,13 @@ namespace FSO.HIT.Events
             if (FadeOut == -1) FadeOut = Common.FSOEnvironment.RefreshRate*3;
         }
 
+        //station files are found in any case: TS1 folder and file names vary in case between installs, and Linux paths are
+        //case-sensitive. (Attributes as Directory.GetFiles(path, pattern, SearchOption) skips none.)
+        private static readonly EnumerationOptions AnyCaseRecursive = new EnumerationOptions
+            { MatchCasing = MatchCasing.CaseInsensitive, RecurseSubdirectories = true, AttributesToSkip = 0 };
+        private static readonly EnumerationOptions AnyCaseTop = new EnumerationOptions
+            { MatchCasing = MatchCasing.CaseInsensitive, RecurseSubdirectories = false, AttributesToSkip = 0 };
+
         private void LoadStation(string path)
         {
             var isRegex = path.Contains('*');
@@ -131,7 +139,17 @@ namespace FSO.HIT.Events
             string[] files;
             if (!isRegex) {
                 statBase = (content.TS1) ? Path.Combine(content.TS1BasePath, path) : content.GetPath(path);
-                files = Directory.GetFiles(statBase, "*.xa", SearchOption.AllDirectories);
+                if (content.TS1)
+                {
+                    var found = FSO.Common.Utils.PathCaseTools.InsensitiveDirectory(statBase);
+                    if (found != null) statBase = found.TrimEnd('/', '\\') + "/"; //the commercials below are found from the trailing slash
+                }
+                if (!Directory.Exists(statBase))
+                {
+                    FSO.Content.TS1.TS1Audio.NoteOnce("TV or radio station folder " + statBase + " wasn't found.");
+                    return;
+                }
+                files = Directory.GetFiles(statBase, "*.xa", AnyCaseRecursive);
             } else
             {
                 statBase = (content.TS1) ? content.TS1BasePath : content.BasePath;
@@ -149,7 +167,7 @@ namespace FSO.HIT.Events
                 var index = bs.LastIndexOf('/');
                 if (index == -1) index = bs.LastIndexOf('\\');
 
-                var files2 = Directory.GetFiles(bs.Substring(0, index), "*.xa", SearchOption.TopDirectoryOnly);
+                var files2 = Directory.GetFiles(bs.Substring(0, index), "*.xa", AnyCaseTop);
                 foreach (var file in files2)
                 {
                     Sounds.Insert(rand.Next(Sounds.Count + 1), file);
@@ -162,7 +180,7 @@ namespace FSO.HIT.Events
                     var regex = new Regex(path);
                     files = content.AllFiles.Where(x => regex.IsMatch(x.Replace('\\', '/'))).Select(x => content.GetPath(x)).ToArray();
                 } else {
-                    files = Directory.GetFiles(statBase, "*.mp3", SearchOption.AllDirectories);
+                    files = Directory.GetFiles(statBase, "*.mp3", AnyCaseRecursive);
                 }
                 IsMusic = true;
             }
@@ -171,6 +189,7 @@ namespace FSO.HIT.Events
             {
                 Sounds.Insert(rand.Next(Sounds.Count + 1), file);
             }
+            if (Sounds.Count == 0) FSO.Content.TS1.TS1Audio.NoteOnce("TV or radio station " + path + " has no sound files (looked in " + statBase + ").");
         }
 
         private void KillLast()

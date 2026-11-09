@@ -25,6 +25,8 @@ namespace FSO.Files.HIT
         //ts1
         public uint SubroutineID;
         public uint HitlistID;
+        /// <summary>The hitlist's label in a TS1 .hot file (@name), for logs: HitlistID is 0 if it didn't resolve.</summary>
+        public string HitlistLabel;
 
         /// <summary>
         /// Creates a new track.

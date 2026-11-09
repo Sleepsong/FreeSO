@@ -177,7 +177,16 @@ namespace FSO.HIT
                     {
                         InterruptBlocker = (aevt as HITThread);
                     }
-                    else return aevt; //an event of this type is already alive - here, take it.
+                    else
+                    {
+                        if (FSO.Content.TS1.TS1Audio.Trace != null)
+                        {
+                            var t = aevt as HITThread;
+                            FSO.Content.TS1.TS1Audio.Trace("  '" + evt + "' is already alive: given that one"
+                                + ((t != null) ? " (alive " + (t.TickN / 60) + "s, playing: " + t.AnyNoteActive() + (t.Paused ? ", paused" : "") + ")" : "") + ".");
+                        }
+                        return aevt; //an event of this type is already alive - here, take it.
+                    }
                 }
             }
 
@@ -255,6 +264,8 @@ namespace FSO.HIT
                 {
                     var thread = new HITThread(evtent.ResGroup, this);
                     thread.PC = SubroutinePointer;
+                    FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + evt + "' runs its sound script from 0x" + SubroutinePointer.ToString("X")
+                        + " (track 0x" + TrackID.ToString("X8") + ").");
                     thread.LoopPointer = (int)thread.PC;
                     if (TrackID != 0) thread.SetTrack(TrackID, evtent.TrackID);
                     Sounds.Add(thread);
@@ -282,6 +293,12 @@ namespace FSO.HIT
                 }
             }
 
+            if (content.TS1)
+            {
+                FSO.Content.TS1.TS1Audio.NoteOnce((evts != null && evts.ContainsKey(evt))
+                    ? "Sound event '" + evt + "' has nothing to play (no routine or track for it)."
+                    : "No sound event named '" + evt + "' in the game's sound data.");
+            }
             return null;
         }
     }

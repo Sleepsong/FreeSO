@@ -159,6 +159,7 @@ namespace FSO.Files.HIT
                                         DuckingPriority = (HITDuckingPriorities)ParseEME(tcSplit[4]),
                                         ControlGroup = (HITControlGroups)ParseEME(tcSplit[5]),
                                         HitlistID = (uint)HSMConst(tcSplit[7].Substring(1)), //cut out @
+                                        HitlistLabel = tcSplit[7],
                                         SoundID = (uint)ParseEME(tcSplit[8])
                                     };
 
@@ -196,11 +197,22 @@ namespace FSO.Files.HIT
             }
         }
 
+        /// <summary>
+        /// Labels from every .hsm (TS1Audio loads them all first): a .hot's labels can be in another file's .hsm.
+        /// </summary>
+        public Dictionary<string, int> FallbackNames;
+
         private int HSMConst(string input)
         {
+            //HSM stores its labels in lower case (they're named in any case), and they were looked up as written, so a
+            //label with a capital letter never resolved: a track's hitlist came out as 0, and the track (a Sim's voice
+            //lines, which pick from a hitlist) played nothing
             int result = 0;
-            AsmNames?.Constants?.TryGetValue(input, out result);
-            return result;
+            if (input == null) return 0;
+            var key = input.Trim().ToLowerInvariant();
+            if (AsmNames?.Constants?.TryGetValue(key, out result) == true) return result;
+            if (FallbackNames?.TryGetValue(key, out result) == true) return result;
+            return 0;
         }
 
         private int ParseEME(string eme)
@@ -218,6 +230,13 @@ namespace FSO.Files.HIT
         public Hot(string Filepath, HSM myAsm)
         {
             AsmNames = myAsm;
+            LoadFrom(File.ReadAllBytes(Filepath));
+        }
+
+        public Hot(string Filepath, HSM myAsm, Dictionary<string, int> fallbackNames)
+        {
+            AsmNames = myAsm;
+            FallbackNames = fallbackNames;
             LoadFrom(File.ReadAllBytes(Filepath));
         }
     }

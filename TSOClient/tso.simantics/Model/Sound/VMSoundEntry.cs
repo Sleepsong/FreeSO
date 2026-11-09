@@ -9,5 +9,6 @@ namespace FSO.SimAntics.Model.Sound
         public bool Zoom;
         public bool Loop;
         public string Name;
+        public bool VolumeChecked; //whether its first volume has been checked, to note one that starts silent
     }
 }

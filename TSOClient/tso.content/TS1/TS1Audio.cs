@@ -29,6 +29,29 @@ namespace FSO.Content.TS1
         /** Audio Cache **/
         public Dictionary<Patch, SoundEffect> SFXCache = new Dictionary<Patch, SoundEffect>();
 
+        /// <summary>
+        /// Notes about sounds that couldn't be played, for a log (the frontend sets it, e.g. with -logs). These failures
+        /// are otherwise silent. Each message is noted once.
+        /// </summary>
+        public static Action<string> Note;
+
+        /// <summary>
+        /// A line for every sound the game asks for, and what came of it, for a sound log (the frontend sets it, e.g. with
+        /// -soundlog). Off unless set: games ask for a lot of sounds.
+        /// </summary>
+        public static Action<string> Trace;
+        private static HashSet<string> Noted = new HashSet<string>();
+
+        public static void NoteOnce(string message)
+        {
+            if (Note == null) return;
+            lock (Noted)
+            {
+                if (!Noted.Add(message)) return;
+            }
+            Note(message);
+        }
+
         private Dictionary<string, HITEventRegistration> _Events = new Dictionary<string, HITEventRegistration>();
         public Dictionary<string, HITEventRegistration> Events
         {
@@ -155,15 +178,30 @@ namespace FSO.Content.TS1
                     matchedFiles.Add(file);
                 }
             }
+            //every .hsm first: a .hot can name labels that another file's .hsm defines
+            var hsms = new Dictionary<string, HSM>();
+            var allNames = new Dictionary<string, int>();
+            foreach (var file in matchedFiles)
+            {
+                var cFile = Path.Combine(ContentManager.TS1BasePath, file);
+                var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
+                var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
+                hsms[file] = hsm;
+                foreach (var name in hsm.Constants)
+                {
+                    if (!allNames.ContainsKey(name.Key)) allNames.Add(name.Key, name.Value);
+                }
+            }
+
             foreach (var file in matchedFiles)
             {
                 //load associated HIT, HSM
                 var cFile = Path.Combine(ContentManager.TS1BasePath, file);
                 var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
 
-                var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
+                var hsm = hsms[file];
                 var hit = new HITFile(PathCaseTools.Insensitive(bPath + ".hit"));
-                var hot = new Hot(cFile, hsm);
+                var hot = new Hot(cFile, hsm, allNames);
 
                 var group = new HITResourceGroup() { hsm = hsm, hit = hit, hot = hot };
 
@@ -201,18 +239,30 @@ namespace FSO.Content.TS1
                 //.Select(x => x.Key + ": " + new string(new char[] { (char)(x.Value.TrackID & 0xFF), (char)((x.Value.TrackID >> 8) & 0xFF), (char)((x.Value.TrackID >> 16) & 0xFF), (char)((x.Value.TrackID >> 24) & 0xFF) })).ToList();
         }
 
+        //A sound file's tracks can use hitlists, tracks and sounds that another sound file defines (a Sim's voice lines:
+        //the track picks a line from a hitlist). Only the event's own file was looked in, so those played nothing. Its
+        //own file still comes first; the tables of every file, loaded in Init, are the fallback.
+
         public Hitlist GetHitlist(uint InstanceID, HITResourceGroup group)
         {
             Hitlist result = null;
-            group.hot.Hitlists.TryGetValue(InstanceID, out result);
+            if (!group.hot.Hitlists.TryGetValue(InstanceID, out result)) HitlistsById.TryGetValue(InstanceID, out result);
             return result;
         }
 
         public Track GetTrack(uint value, uint fallback, HITResourceGroup group)
         {
             Track result = null;
-            group.hot.Tracks.TryGetValue(value, out result);
+            if (!group.hot.Tracks.TryGetValue(value, out result)) TracksById.TryGetValue(value, out result);
             return result;
+        }
+
+        /// <summary>Where a hitlist is defined, for the sound log: the event's own sound file, another, or none.</summary>
+        public string HitlistSource(uint InstanceID, HITResourceGroup group)
+        {
+            if (group?.hot?.Hitlists?.ContainsKey(InstanceID) == true) return "in its own sound file";
+            if (HitlistsById.ContainsKey(InstanceID)) return "in another sound file";
+            return "nowhere";
         }
 
         public SoundEffect GetSFX(Patch patch)
@@ -220,12 +270,25 @@ namespace FSO.Content.TS1
             if (patch == null) return null;
             if (SFXCache.ContainsKey(patch)) return SFXCache[patch];
 
-            var aud = GetAudioFrom(patch.Filename);
+            DecodedSFX aud;
+            SoundEffect sfx;
+            try
+            {
+                aud = GetAudioFrom(patch.Filename);
+                if (aud != null)
+                {
+                    using (var stream = new MemoryStream(aud.Data)) sfx = SoundEffect.FromStream(stream);
+                }
+                else sfx = null;
+            }
+            catch (Exception e)
+            {
+                NoteOnce(patch.Filename + " couldn't be decoded (" + e.GetType().Name + ": " + e.Message + ").");
+                SFXCache.Add(patch, null);
+                return null;
+            }
             if (aud != null)
             {
-                var stream = new MemoryStream(aud.Data);
-                var sfx = SoundEffect.FromStream(stream);
-                stream.Close();
                 SFXCache.Add(patch, sfx);
                 switch (aud.Filetype)
                 {
@@ -244,6 +307,7 @@ namespace FSO.Content.TS1
             else
             {
                 Console.WriteLine(patch.Filename+" was null");
+                NoteOnce(patch.Filename + " wasn't found in the game's sound files.");
                 return null;// pinnedArray; //we couldn't find anything! can't return null so do this... not the best idea tbh
             }
         }
@@ -266,13 +330,14 @@ namespace FSO.Content.TS1
                     return UTKSounds.Get(fname);
             }
             Console.WriteLine("what... "+ext);
+            NoteOnce(fileName + " has a sound type the game doesn't know (" + ext + ").");
             return null;
         }
 
         public Patch GetPatch(uint id, HITResourceGroup group)
         {
             Patch result = null;
-            group.hot.Patches.TryGetValue(id, out result);
+            if (!group.hot.Patches.TryGetValue(id, out result)) PatchesById.TryGetValue(id, out result);
             return result;
         }
     }

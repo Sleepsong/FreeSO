@@ -25,6 +25,28 @@ namespace FSO.HIT
         /// <summary>
         /// Does nothing.
         /// </summary>
+        /// <summary>
+        /// Instructions that do nothing here: each is noted the first time a sound uses it (TS1Audio.Note), since a sound
+        /// that relies on one can play nothing, or the wrong thing. Several also don't read their operands.
+        /// </summary>
+        public static readonly System.Collections.Generic.HashSet<byte> Unimplemented = BuildUnimplemented();
+
+        private static System.Collections.Generic.HashSet<byte> BuildUnimplemented()
+        {
+            var names = new System.Collections.Generic.HashSet<string> {
+                "Note", "NoteOff", "CallEntryPoint", "Less", "Greater", "Not", "Abs", "Error", "Assert", "AddToGroup",
+                "RemoveFromGroup", "GetVar", "Callback", "SmartAdd", "SmartRemove", "SmartRemoveAll", "SmartSetCrit",
+                "And", "NAnd", "Or", "NOr", "XOr", "Inc", "Dec", "PrintReg", "PlayTrack", "KillTrack", "Push", "PushMask",
+                "PushVars", "CallMask", "CallPush", "Pop", "Test1", "Test2", "Test3", "Test4", "SeqGroupWait",
+                "SeqGroupReturn", "SeqGroupTrackID", "SetLT", "SetTL", "WaitNotEqual", "WaitGreater", "WaitLess",
+                "WaitGreatOrEq", "WaitLessOrEq", "TestX", "Throw", "SetSrcDataField", "StopTrack", "SetChanReg",
+                "PlayNote", "StopNote", "KillNote" };
+            var result = new System.Collections.Generic.HashSet<byte>();
+            for (int i = 0; i < Instructions.Length; i++)
+                if (names.Contains(Instructions[i].Method.Name)) result.Add((byte)i);
+            return result;
+        }
+
         public static HITResult NOP(HITThread thread)
         {
             return HITResult.CONTINUE;
@@ -100,10 +122,16 @@ namespace FSO.HIT
         {
             if (Content.Content.Get().TS1)
             {
-                //dunno why this is ts1 specific, but whatever
-                //need to remap from the call id to the function offset
-
-                thread.ResGroup.hot.TrackData.TryGetValue(id, out id);
+                //TS1 names a routine it calls by id, which the .hot's TrackData (or the .hit's own entry points) maps to
+                //its address; other targets, like branches within a routine, are addresses already. This was
+                //TryGetValue(id, out id), which sets an id it doesn't know to 0: the start of the .hit file, so such a
+                //jump ran the file's header as code, and the sound (a Sim's voice lines, the bed) played nothing.
+                if (thread.ResGroup.hot.TrackData.TryGetValue(id, out var mapped)) return mapped;
+                var entryPoints = thread.ResGroup.hit?.EntryPointByTrackID;
+                if (entryPoints != null && entryPoints.TryGetValue(id, out mapped)) return mapped;
+                if (thread.ResGroup.hit?.Data != null && id >= thread.ResGroup.hit.Data.Length)
+                    FSO.Content.TS1.TS1Audio.NoteOnce("Sound '" + thread.Name + "' jumps to 0x" + id.ToString("X8")
+                        + ", which is neither a routine it knows nor an address in its .hit file: it stops there.");
             }
             return id;
         }
@@ -192,18 +220,22 @@ namespace FSO.HIT
         /// </summary>
         public static HITResult Jump(HITThread thread)
         {
-            var read = thread.ReadByte();
+            //The operand is a 4 byte address, or a register (0-15). This told them apart by the first byte alone, so an
+            //address whose low byte is 15 or less (0x1B0A) was taken for a register, usually 0: the script jumped to the
+            //start of the file and ran its header. Read as 4 bytes, an address is one that's in the file; a register is
+            //a value under 16 (4 bytes) or a byte followed by the next instruction.
+            var data = thread.Src.Data;
+            var at = (int)thread.PC;
+            uint value = (at + 4 <= data.Length) ? (uint)(data[at] | (data[at + 1] << 8) | (data[at + 2] << 16) | (data[at + 3] << 24)) : 0;
+            var first = data[at];
 
-            if (read > 15) //literal
+            if (first > 15 || (value >= 16 && value < data.Length)) //literal address
             {
-                thread.PC--; //backtraaackkk
                 thread.PC = PCTrans(thread.ReadUInt32(), thread);
             }
-            else //no idea if there are collisions. if there are i'm blaming fatbag. >:)
+            else //a register
             {
-                thread.PC = PCTrans((uint)thread.ReadVar(read), thread);
-                if (thread.ReadByte() == 0) thread.PC += 2; //if next is no-op, the operand is 4 byte
-                else thread.PC--; //operand is 1 byte (next is an instruction), backtrack
+                thread.PC = PCTrans((uint)thread.ReadVar(first), thread);
             }
 
             return HITResult.CONTINUE;
@@ -375,7 +407,11 @@ namespace FSO.HIT
         {
             // Generated TS1 tracks are "play; loop" and rely on the Play Sound primitive's loop flag.
             // Without this, one-shot sounds (e.g. the paper carrier's whistle) repeat until the owner leaves.
-            if (thread.LoopSetByOwner && !thread.Loop) return HITResult.KILL;
+            if (thread.LoopSetByOwner && !thread.Loop)
+            {
+                FSO.Content.TS1.TS1Audio.Trace?.Invoke("  '" + thread.Name + "' ends at its loop (doesn't loop; playing: " + thread.AnyNoteActive() + ").");
+                return HITResult.KILL;
+            }
             thread.PC = (uint)thread.LoopPointer;
             return HITResult.CONTINUE;
         }
