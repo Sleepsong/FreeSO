@@ -46,17 +46,10 @@ namespace FSO.SimAntics
             switch (var)
             {
                 case VMStackObjectVariable.Flags:
-                    var flags = (VMEntityFlags)value;
-                    if (UseWorld)
-                        ((ObjectComponent)WorldUI).HideForCutaway = (flags & VMEntityFlags.HideForCutaway) > 0;
-                //            || ((VMEntityFlags2)GetValue(VMStackObjectVariable.FlagField2) & VMEntityFlags2.ArchitectualDoor) > 0;
+                    if (UseWorld) RefreshHideForCutaway((VMEntityFlags)value, (VMEntityFlags2)GetValue(VMStackObjectVariable.FlagField2));
                     break;
                 case VMStackObjectVariable.FlagField2:
-                    /*
-                    var flags2 = (VMEntityFlags2)value;
-                    if (UseWorld)
-                        ((ObjectComponent)WorldUI).HideForCutaway = (flags2 & VMEntityFlags2.ArchitectualDoor) > 0
-                            || ((VMEntityFlags)GetValue(VMStackObjectVariable.Flags) & VMEntityFlags.HideForCutaway) > 0; */
+                    if (UseWorld) RefreshHideForCutaway((VMEntityFlags)GetValue(VMStackObjectVariable.Flags), (VMEntityFlags2)value);
                     break;
 
             }
@@ -66,6 +59,19 @@ namespace FSO.SimAntics
         public override short GetValue(VMStackObjectVariable var)
         {
             return base.GetValue(var);
+        }
+
+        /// <summary>
+        /// Objects with Hide For Cutaway (TS1's windows set it) aren't drawn where their wall is cut. TS1's doors don't set
+        /// it, but are hidden in cut walls all the same, leaving the doorway open in the low walls; otherwise the whole
+        /// door, frame and all, stood at full height among them. Only in walls, which cut: gates in fences stay. TSO's doors
+        /// stay up.
+        /// </summary>
+        private void RefreshHideForCutaway(VMEntityFlags flags, VMEntityFlags2 flags2)
+        {
+            var component = (ObjectComponent)WorldUI;
+            component.HideForCutaway = (flags & VMEntityFlags.HideForCutaway) > 0;
+            component.HideForCutawayInWall = VM.GlobTS1 && (flags2 & VMEntityFlags2.ArchitectualDoor) > 0;
         }
 
         public bool RefreshGraphic()
