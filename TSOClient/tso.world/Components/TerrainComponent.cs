@@ -46,6 +46,13 @@ namespace FSO.LotView.Components
         private Color DarkGreen = new Color(8, 52, 8);
         private Color DarkBrown = new Color(81, 60, 18);
         private int GrassHeight;
+        /// <summary>
+        /// The lot type's grass height before halving for 2D without MRT (there, each layer is drawn twice): 3D draws
+        /// its layers once, so it gets the full height.
+        /// </summary>
+        private int FullGrassHeight = 1;
+        /// <summary>The terrain's extent in model space, for telling when 3D blades are too far away to show.</summary>
+        private BoundingBox? GroundBounds;
         private float GrassDensityScale = 1f;
         public bool DepthMode;
 
@@ -137,6 +144,7 @@ namespace FSO.LotView.Components
                 DarkBrown = LotTypeGrassInfo.DarkBrown[index];
             }
             GrassHeight = LotTypeGrassInfo.Heights[index];
+            FullGrassHeight = Math.Max(1, GrassHeight);
             if (!FSOEnvironment.UseMRT) GrassHeight /= 2;
             if (GrassHeight == 0) GrassHeight = 1;
             GrassDensityScale = LotTypeGrassInfo.GrassDensity[index];
@@ -272,6 +280,19 @@ namespace FSO.LotView.Components
 
             VertexBuffer = new VertexBuffer(device, typeof(TerrainParallaxVertex), Geom.Length, BufferUsage.None);
             VertexBuffer.SetData(Geom);
+
+            if (Geom.Length > 0)
+            {
+                var min = new Vector3(float.MaxValue);
+                var max = new Vector3(float.MinValue);
+                foreach (var v in Geom)
+                {
+                    min = Vector3.Min(min, v.Position);
+                    max = Vector3.Max(max, v.Position);
+                }
+                GroundBounds = new BoundingBox(min, max);
+            }
+            else GroundBounds = null;
 
             IndexBuffer = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, sizeof(int) * Indexes.Length, BufferUsage.None);
             IndexBuffer.SetData(Indexes);
@@ -536,13 +557,13 @@ namespace FSO.LotView.Components
             Effect.TexMatrix = new Vector4(1f, 1f, -1f, 1f);
             Effect.TexOffset = new Vector2(0.5f, 0.5f);
 
-            if (primitives > 0)
+            int grassNum = (int)Math.Ceiling((_3d ? FullGrassHeight : GrassHeight) / (float)grassScale);
+            if (primitives > 0 && !(_3d && BladesOutOfReach(world, device, altOff, grassNum * (20 / 522f) * grassScale)))
             {
                 Effect.Alpha = (Alpha-0.75f) * 4;
                 Effect.Level = (float)0.0001f;
                 Effect.RoomMap = world.Rooms.RoomMaps[0];
                 Effect.SetTechnique(GrassTechniques.DrawBlades);
-                int grassNum = (int)Math.Ceiling(GrassHeight / (float)grassScale);
                 
                 RenderTargetBinding[] rts = null;
                 if (FSOEnvironment.UseMRT)
@@ -655,6 +676,32 @@ namespace FSO.LotView.Components
                     }
                 }
             });
+        }
+
+        /// <summary>
+        /// In 3D, grass blades fade out with distance: the blade shader throws away every pixel deeper than
+        /// 100 x GrassFadeMul (before the perspective divide). From far enough away, each blade layer covers the whole
+        /// lot only to be thrown away pixel by pixel, which phones feel. True when even the nearest corner of the ground
+        /// (blades included) is that deep, so the layers can be skipped. Depth is linear in position, so the box's
+        /// corners bound it; a corner behind the camera counts as near.
+        /// </summary>
+        private bool BladesOutOfReach(WorldState world, GraphicsDevice device, float altOff, float bladeTop)
+        {
+            if (GroundBounds == null) return false;
+            var b = GroundBounds.Value;
+            var limit = 100f * (float)Math.Sqrt(device.Viewport.Width / 1920f); //as GrassFadeMul
+            var viewProj = world.View * world.Projection;
+            var nearest = float.MaxValue;
+            for (int i = 0; i < 8; i++)
+            {
+                var corner = new Vector4(
+                    ((i & 1) == 0) ? b.Min.X : b.Max.X,
+                    (((i & 2) == 0) ? b.Min.Y - 1f : b.Max.Y + bladeTop + 1f) - altOff,
+                    ((i & 4) == 0) ? b.Min.Z : b.Max.Z,
+                    1f);
+                nearest = Math.Min(nearest, Vector4.Transform(corner, viewProj).Z);
+            }
+            return nearest > limit;
         }
 
         public void DrawLMap(GraphicsDevice gd, LightData light, Matrix projection, Matrix lightTransform)

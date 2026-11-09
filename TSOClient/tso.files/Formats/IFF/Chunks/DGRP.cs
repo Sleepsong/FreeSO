@@ -282,6 +282,45 @@ namespace FSO.Files.Formats.IFF.Chunks
             return null;
         }
 
+        /// <summary>
+        /// A stand-in depth for a sprite that has none of its own (an old SPR# sprite, or a SPR2 frame drawn without a
+        /// z channel), so a 3D mesh can still be made of it: a flat card at the given depth over the sprite's visible
+        /// pixels, or over its whole rectangle when its pixels aren't to hand (transparent pixels aren't drawn anyway).
+        /// Sized to the sprite's texture, width x height.
+        /// </summary>
+        public byte[] GetFlatDepth(int width, int height, byte depth)
+        {
+            var result = new byte[width * height];
+            Color[] px = null;
+            var pxWidth = 0;
+            var spr2 = Parent.ChunkParent.Get<SPR2>((ushort)this.SpriteID);
+            if (spr2 != null && this.SpriteFrameIndex < spr2.Frames.Length)
+            {
+                var frame = spr2.Frames[this.SpriteFrameIndex];
+                var had = frame.PixelData != null;
+                frame.DecodeIfRequired(false);
+                px = frame.PixelData;
+                pxWidth = frame.Width;
+                if (!had && !IffFile.RETAIN_CHUNK_DATA) frame.PixelData = null; //decoded just for this: don't keep it
+            }
+
+            var i = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    var visible = true;
+                    if (px != null)
+                    {
+                        var pi = y * pxWidth + x;
+                        visible = x < pxWidth && pi < px.Length && px[pi].A > 8;
+                    }
+                    result[i++] = visible ? depth : (byte)255;
+                }
+            }
+            return result;
+        }
+
         public WorldTexture GetWorldTexture(Microsoft.Xna.Framework.Graphics.GraphicsDevice device)
         {
             var iff = Parent.ChunkParent;

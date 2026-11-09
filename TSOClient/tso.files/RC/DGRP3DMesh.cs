@@ -73,6 +73,27 @@ namespace FSO.Files.RC
         public static AutoResetEvent NewRecon = new AutoResetEvent(false);
 
         public static bool Sync;
+
+        /// <summary>
+        /// Notes about objects whose meshes needed help to be made (sprites without depth, sprites that failed), for a
+        /// log. Each object is noted once per mesh.
+        /// </summary>
+        public static Action<string> Note;
+
+        /// <summary>
+        /// Depth given to a sprite that has none of its own, as a z-buffer value: a flat card a little in front of the
+        /// object's centre, from the view it was drawn for (the centre is at about 206; nearer is smaller). In front, so
+        /// the opposite view's card, which sits the same distance behind, doesn't fight with it.
+        /// </summary>
+        public const byte FlatSpriteDepth = 199;
+
+        /// <summary>
+        /// Object meshes being made from sprites right now (started, not yet complete), for a log: one that stays
+        /// counted never finished, and its object isn't drawn.
+        /// </summary>
+        public static int Building => _Building;
+        private static int _Building;
+
         public static void InitRCWorkers()
         {
             var cores = Math.Max(1, Environment.ProcessorCount-1); //maybe detect hyperthreading somehow
@@ -362,6 +383,7 @@ namespace FSO.Files.RC
             if (!config.InRange(dgrp.ChunkID)) config = DefaultParams;
 
             int totalSpr = 0;
+            int flatSprites = 0;
             for (uint rotation = 0; rotation < 4; rotation++)
             {
                 if (config.DoorFix)
@@ -417,7 +439,15 @@ namespace FSO.Files.RC
 
                     var depthB = sprite.GetDepth();
 
-                    if (depthB == null) continue;
+                    if (depthB == null)
+                    {
+                        //no depth of its own (an old SPR# sprite, or one drawn without a z channel): a flat card, rather
+                        //than leaving it out. Leaving it out left the whole object invisible: it was already counted
+                        //above, and the mesh is only built once every counted sprite is done.
+                        var size = ((TextureInfo)tex.Tag).Size;
+                        depthB = sprite.GetFlatDepth(size.X, size.Y, FlatSpriteDepth);
+                        flatSprites++;
+                    }
 
                     var useDequantize = false;
                     float[] depth = null;
@@ -443,6 +473,8 @@ namespace FSO.Files.RC
 
                     QueueWork(() =>
                     {
+                      try
+                      {
                         if (depth == null && depthB != null)
                         {
                             depth = depthB.Select(x => x / 255f).ToArray();
@@ -726,10 +758,26 @@ namespace FSO.Files.RC
                                 }
                             });
                         }
+                      }
+                      catch (Exception e)
+                      {
+                        //this sprite is left out, but the rest of the object is still built (and the game goes on: an
+                        //exception on this thread would end it)
+                        Note?.Invoke("[3d] " + Name + ": sprite " + sprite.SpriteID + " couldn't be made 3D (" + e.Message + ")");
+                        AssetStreaming.InStreamUpdate(() =>
+                        {
+                            lock (this)
+                            {
+                                if (++CompletedCount == TotalSprites) Complete(gd);
+                            }
+                        });
+                      }
                     });
                 }
             }
             TotalSprites = totalSpr;
+            if (totalSpr > 0) Interlocked.Increment(ref _Building);
+            if (flatSprites > 0) Note?.Invoke("[3d] " + Name + ": " + flatSprites + " of " + totalSpr + " sprites have no depth, drawn as flat cards");
 
         }
 
@@ -783,6 +831,7 @@ namespace FSO.Files.RC
 
         private void Complete(GraphicsDevice gd)
         {
+            Interlocked.Decrement(ref _Building);
             Bounds = (BoundPts.Count == 0) ? new BoundingBox() : BoundingBox.CreateFromPoints(BoundPts);
             BoundPts = null;
             SaveAsync(this);
