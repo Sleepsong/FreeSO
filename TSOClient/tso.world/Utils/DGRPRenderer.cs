@@ -7,8 +7,8 @@ using FSO.Common.Rendering;
 using Microsoft.Xna.Framework.Graphics;
 using FSO.Files.RC;
 using FSO.LotView.Effects;
-using FSO.Common.Utils;
 using FSO.Common;
+using FSO.Common.Utils;
 
 namespace FSO.LotView.Utils
 {
@@ -41,6 +41,18 @@ namespace FSO.LotView.Utils
         //3d cache
         private DGRP3DMesh Mesh;
         public Matrix World;
+        /// <summary>Whether the object is in another object (a sink in a counter): only then is its basin cut into it.</summary>
+        public bool InObject;
+        /// <summary>The top of the object this one is in, in this mesh's units above this object's base (NaN if unknown).</summary>
+        public float ContainerTop = float.NaN;
+        /// <summary>The name of the mesh of the object this one is in (for notes).</summary>
+        public string ContainerMesh;
+        /// <summary>The top of this object's mesh, in its own units (NaN until it's loaded).</summary>
+        public float MeshTop => (Mesh?.Bounds == null) ? float.NaN : Mesh.Bounds.Value.Max.Y;
+
+        /// <summary>Notes for a log (the frontend sets it, e.g. with -logs): what's cut into the object an object is in.</summary>
+        public static Action<string> Note;
+        private static HashSet<string> Noted = new HashSet<string>();
         
         public DGRPRenderer(DGRP group, OBJD source)
         {
@@ -286,10 +298,42 @@ namespace FSO.LotView.Utils
             effect.Level = (float)(Level - 0.999f);
             var advDir = WorldConfig.Current.Directional && WorldConfig.Current.AdvancedLighting;
 
-            if (Mesh.DepthMask != null)
+            var basin = (InObject && Mesh.MaskType != DGRP3DMaskType.Portal) ? Mesh.BasinVolume : null;
+            if (InObject && Note != null) NoteBasin();
+            if (basin?.Verts != null)
+            {
+                //a column over the basin, from its bottom to just above the top of what it's in (a counter: capped, so it
+                //can't reach far above the counter and take a Sim's hands with it). Each of its faces behind what's drawn
+                //so far flips the stencil: once (1) where that is inside the column, which is the counter top, and twice or
+                //never (0) where it's in front of the column (a Sim) or behind it. Then the depth is cleared where it's 1,
+                //and the basin is drawn into the counter.
+                var top = (float.IsNaN(ContainerTop) ? 0.02f : Math.Max(-0.05f, Math.Min(0.12f, ContainerTop))) + 0.03f;
+                var bottom = Math.Min(Mesh.BasinBottom, top - 0.05f);
+                effect.World = Matrix.CreateScale(1, top - bottom, 1) * Matrix.CreateTranslation(0, bottom, 0) * World;
+
+                var lastRaster = device.RasterizerState;
+                device.RasterizerState = RasterizerState.CullNone;
+                effect.SetTechnique(RCObjectTechniques.DepthClear);
+                effect.CurrentTechnique.Passes[0].Apply();
+                device.DepthStencilState = BasinMark;
+                device.Indices = basin.Indices;
+                device.SetVertexBuffer(basin.Verts);
+                device.BlendState = NoColor;
+                device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, basin.PrimCount);
+
+                device.DepthStencilState = DepthClear2;
+                DrawDepthClearPass(device, effect, basin.PrimCount);
+
+                device.DepthStencilState = DepthStencilState.Default;
+                device.BlendState = BlendState.NonPremultiplied;
+                device.RasterizerState = lastRaster;
+                effect.World = World;
+                effect.SetTechnique(RCObjectTechniques.Draw);
+            }
+            else if (Mesh.DepthMask != null)
             {
                 var geom = Mesh.DepthMask;
-                //depth mask for drawing into a surface or wall
+                //depth mask for drawing into a surface or wall (a basin cut into what it's in replaces it)
                 if (geom.Verts != null)
                 {
                     effect.SetTechnique(RCObjectTechniques.DepthClear);
@@ -367,11 +411,10 @@ namespace FSO.LotView.Utils
 
         /// <summary>
         /// The depth clear technique's second pass: depth pushed to the far plane where the stencil marks it (behind a
-        /// depth mask: a window, a fireplace, a sink in a remesh pack). Its pixel shader writes gl_FragDepth, which phone
-        /// shaders (GLSL ES 1.00, FSOEnvironment.SoftwareDepth) don't have, so it doesn't compile there and the game stops
-        /// on the first such object. On phones the same geometry is drawn with the first pass's shader and a
-        /// view-projection whose depth equals its w, which puts every point just in front of the far plane: the GPU
-        /// writes the far depth instead of the shader.
+        /// basin's opening, or a depth mask). Its pixel shader writes gl_FragDepth, which phone shaders (GLSL ES 1.00,
+        /// FSOEnvironment.SoftwareDepth) don't have, so it can't compile there. On phones the same geometry is drawn with
+        /// the first pass's shader and a view-projection whose depth equals its w, which puts every point just in front of
+        /// the far plane: the GPU writes the far depth instead of the shader.
         /// </summary>
         private static void DrawDepthClearPass(GraphicsDevice device, RCObjectEffect effect, int primCount)
         {
@@ -392,6 +435,26 @@ namespace FSO.LotView.Utils
             effect.CurrentTechnique.Passes[0].Apply();
             device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, primCount);
             effect.ViewProjection = vp; //(uploaded with the next pass applied)
+        }
+
+        /// <summary>Notes once, for each object in another, what's cut into it and why (or why not).</summary>
+        private void NoteBasin()
+        {
+            if (Mesh.Name == "Loading") return; //still streaming in: noted once it's loaded
+            var name = Mesh.Name ?? "?";
+            var key = name + " in " + ContainerMesh;
+            lock (Noted) { if (!Noted.Add(key)) return; }
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string f(float v) => float.IsNaN(v) ? "unknown" : v.ToString("0.000", inv);
+            string what;
+            if (Mesh.MaskType == DGRP3DMaskType.Portal) what = "it has a portal mask, so nothing is cut";
+            else if (Mesh.BasinVolume != null)
+                what = "its basin (" + Mesh.BasinPoints + " point outline, bottom " + f(Mesh.BasinBottom) + ") is cut into it"
+                    + ((Mesh.DepthMask != null) ? ", in place of the mesh's own depth mask" : "");
+            else what = "nothing reaches far enough below its base to cut (lowest point " + f(Mesh.LowestY) + ")"
+                    + ((Mesh.DepthMask != null) ? "; the mesh's own depth mask is used" : "");
+            Note(name + " is in " + (ContainerMesh ?? "?") + ": " + what + ". Top of what it's in: " + f(ContainerTop)
+                + " (tiles above its base).");
         }
 
         public void DrawLMap(GraphicsDevice device, sbyte level, float yOff)
@@ -483,6 +546,24 @@ namespace FSO.LotView.Utils
 
             ReferenceStencil = 1,
             DepthBufferWriteEnable = true
+        };
+
+        /// <summary>
+        /// A basin's column: each face behind what's drawn flips the stencil's lowest bit, so it's 1 where what's drawn is
+        /// inside the column. No depth or colour written; either winding.
+        /// </summary>
+        public static DepthStencilState BasinMark = new DepthStencilState()
+        {
+            StencilEnable = true,
+            StencilFunction = CompareFunction.Always,
+            StencilPass = StencilOperation.Keep,
+            StencilFail = StencilOperation.Keep,
+            StencilDepthBufferFail = StencilOperation.Invert,
+            StencilWriteMask = 1,
+            ReferenceStencil = 1,
+            DepthBufferEnable = true,
+            DepthBufferWriteEnable = false,
+            DepthBufferFunction = CompareFunction.LessEqual
         };
 
         public static DepthStencilState DepthClear2 = new DepthStencilState()

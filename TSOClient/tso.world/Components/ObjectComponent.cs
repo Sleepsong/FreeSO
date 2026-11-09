@@ -372,6 +372,12 @@ namespace FSO.LotView.Components
                 forward.Z *= 1;
                 if (forward.Z < 0) forward.Y = -forward.Y;
                 DrawOrder = Vector3.Dot(ctr, forward);
+                //an object in another (a sink in a counter) is drawn after it, so it can be cut into it
+                if (Container is ObjectComponent holder && holder != this)
+                {
+                    holder.UpdateDrawOrder(world);
+                    DrawOrder = Math.Max(DrawOrder, holder.DrawOrder + 0.001f);
+                }
             }
             else
             {
@@ -523,6 +529,14 @@ namespace FSO.LotView.Components
             {
                 var mworld = World3D;
                 dgrp.World = mworld;
+                //in a counter, not in a Sim's hand: its basin, if it has one, is cut into the counter's top
+                var holder = Container as ObjectComponent;
+                dgrp.InObject = holder != null;
+                if (holder != null)
+                {
+                    dgrp.ContainerTop = holder.dgrp.MeshTop + (holder.Position.Z - Position.Z);
+                    dgrp.ContainerMesh = holder.DrawGroup?.ChunkParent?.Filename + " " + holder.DrawGroup?.ChunkID;
+                }
                 if (this.DrawGroup != null) dgrp.Draw3D(world);
             }
             if (world.CameraMode == CameraRenderMode._2D && Mode.IsSet(ComponentRenderMode._2D))
