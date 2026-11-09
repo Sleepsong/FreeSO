@@ -320,6 +320,20 @@ namespace FSO.Client.UI.Controls
             get { return m_isDown; }
         }
 
+        /// <summary>Whether clicking does anything. Display-only buttons (e.g. portraits) have no handler.</summary>
+        public bool HasClickHandler => OnButtonClick != null;
+
+        /// <summary>Clicks the button as the mouse would (used for gamepad activation). Does nothing while disabled.</summary>
+        public void PerformClick()
+        {
+            if (m_Disabled) return;
+            if (OnButtonClick != null)
+            {
+                OnButtonClick(this);
+                HITVM.Get().PlaySoundEvent(UISounds.Click);
+            }
+        }
+
         protected void OnMouseEvent(UIMouseEventType type, UpdateState state)
         {
             if ((m_Disabled || Opacity < 1f) && type != UIMouseEventType.MouseOut) { return; }

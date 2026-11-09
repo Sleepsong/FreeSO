@@ -284,7 +284,7 @@ namespace FSO.Client.UI
             state.MouseOverWindow = mousePosition.X > 0 && mousePosition.Y > 0 &&
                                     mousePosition.X < bounds.Width && mousePosition.Y < bounds.Height;
             if (FSOEnvironment.SoftwareKeyboard) state.MouseOverWindow = true;
-            state.WindowFocused = GameFacade.Game.IsActive;
+            state.WindowFocused = GameFacade.Game.HasFocus;
 
             /** 
              * Handle the mouse events from the previous frame
@@ -300,7 +300,9 @@ namespace FSO.Client.UI
 
             state.InputManager = inputManager;
             Content.Content.Get()?.Changes.RunResModifications();
+            Overlay?.Update(state); //first, so it can take the pad before screens and dialogs see it
             mainUI.Update(state);
+            UpdateDialogNavigation(state);
 
             if (state.AltDown && state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.Enter))
             {
@@ -329,14 +331,61 @@ namespace FSO.Client.UI
             TooltipProperties = state.UIState.TooltipProperties;
         }
 
+        /// <summary>
+        /// Drawn above every screen and dialog, and updated before them, so it can take the pad first: an on-screen
+        /// keyboard. It isn't part of the UI tree; it lays itself out in screen space.
+        /// </summary>
+        public UIElement Overlay;
+
         public void PreDraw(UISpriteBatch SBatch)
         {
+            Overlay?.PreDraw(SBatch);
             mainUI.PreDraw(SBatch);
+        }
+
+        /// <summary>
+        /// With a pad connected, the top-most modal dialog is navigated natively and the pad is captured, so the
+        /// virtual cursor stands down. Dialogs with nothing focusable are left to the virtual cursor.
+        /// </summary>
+        private void UpdateDialogNavigation(UpdateState state)
+        {
+            DialogReference top = null;
+            for (int i = Dialogs.Count - 1; i >= 0; i--)
+            {
+                if (Dialogs[i].Modal)
+                {
+                    top = Dialogs[i];
+                    break;
+                }
+            }
+
+            if (state.PadTextEntry) return; //an on-screen keyboard has the pad; keep the dialog's focus for afterwards
+            if (top != null && state.Pad.Connected)
+            {
+                if (DialogNavigator.Scope != top.Dialog) DialogEmptyFrames = 0;
+                if (DialogNavigator.Update(state, top.Dialog))
+                {
+                    DialogEmptyFrames = 0;
+                    state.PadCaptured = true;
+                }
+                else if (++DialogEmptyFrames < DialogOpeningFrames)
+                {
+                    //buttons often appear only after a dialog's opening animation; don't let the virtual cursor
+                    //(and a stray click) in during it.
+                    state.PadCaptured = true;
+                }
+            }
+            else
+            {
+                DialogNavigator.Clear();
+            }
         }
 
         public void Draw(UISpriteBatch SBatch)
         {
             mainUI.Draw(SBatch);
+            DialogNavigator.Draw(SBatch);
+            Overlay?.Draw(SBatch);
 
             if (TooltipProperties.UpdateDead) TooltipProperties.Show = false;
             if (Tooltip != null && TooltipProperties.Show) DrawTooltip(SBatch, TooltipProperties.Position, TooltipProperties.Opacity, TooltipProperties.Color);
@@ -421,6 +470,24 @@ namespace FSO.Client.UI
         }
 
         private List<DialogReference> Dialogs = new List<DialogReference>();
+
+        /// <summary>Gamepad navigation for the top-most modal dialog. See <see cref="UIFocusNavigator"/>.</summary>
+        public UIFocusNavigator DialogNavigator = new UIFocusNavigator();
+        private int DialogEmptyFrames;
+        private const int DialogOpeningFrames = 60; //after this long with nothing focusable, the dialog gets the virtual cursor
+
+        /// <summary>True while any modal dialog is shown. Screens use it to hand gamepad input to the dialog.</summary>
+        public bool HasModalDialog
+        {
+            get
+            {
+                foreach (var dialog in Dialogs)
+                {
+                    if (dialog.Modal) return true;
+                }
+                return false;
+            }
+        }
         public void AddDialog(DialogReference dialog)
         {
             //dialogContainer.Add(dialog.Dialog);

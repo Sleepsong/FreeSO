@@ -285,7 +285,15 @@ namespace FSO.SimAntics.Engine
             }
         }
 
+        private bool ResetAfterLoad;
+
         public void Tick(){
+            if (ResetAfterLoad)
+            {
+                ResetAfterLoad = false;
+                Entity.Reset(Context);
+                return;
+            }
 #if IDE_COMPAT
             if (ThreadBreak == VMThreadBreakMode.Pause) return;
             else if (ThreadBreak == VMThreadBreakMode.Reset)
@@ -369,6 +377,7 @@ namespace FSO.SimAntics.Engine
 #endif
 
                 if (e is ThreadAbortException) throw e;
+                VMExceptionLog.Write(e, this, Entity);
                 if (Stack.Count == 0) return;
                 var context = Stack[Stack.Count - 1];
                 bool Delete = ((Entity is VMGameObject) && (DialogCooldown > 30 * 20 - 10));
@@ -1053,15 +1062,17 @@ namespace FSO.SimAntics.Engine
         public void EnsureDirectControlAction()
         {
             if (!(Entity is VMAvatar ava) ||
-                VM.GlobTS1 ||
-                ava.GetPersonData(VMPersonDataVariable.UnusedAndDoNotUse2) != 32767 ||
+                (VM.GlobTS1 ? !ava.DirectControlEnabled : ava.GetPersonData(VMPersonDataVariable.UnusedAndDoNotUse2) != 32767) ||
                 ava.GetPersonData(VMPersonDataVariable.Posture) != 0 ||
                 Queue.Any(entry => entry.Flags.HasFlag(TTABFlags.FSODirectControl)))
             {
                 return;
             }
 
-            var routine = Entity.GetRoutineWithOwner(9001, Context);
+            //TS1 content has no direct control routine, and its own 0x2329 (if any) is unrelated: always use the stand-in.
+            var routine = VM.GlobTS1
+                ? new VMBHAVOwnerPair(VMDirectControlFrame.TS1Routine, Entity.Object)
+                : Entity.GetRoutineWithOwner(9001, Context);
             if (routine == null || routine.routine == null) return;
 
             EnqueueAction(
@@ -1129,10 +1140,47 @@ namespace FSO.SimAntics.Engine
                     Stack.Add(new VMStackFrame(item, context, this));
                 }
             }
+            //a saved frame that doesn't match the installed content can't be resumed: its routine is missing, or the
+            //saved position is past the routine's end (the object's code changed since the save). The thread would
+            //crash the first time it returned to that frame. Restart the entity on its first tick instead (what that
+            //crash's handler does anyway), and record why.
+            var broken = Stack.FirstOrDefault(frame => frame.GetType() == typeof(VMStackFrame)
+                && (frame.Routine == null || frame.InstructionPointer >= frame.Routine.Instructions.Length));
+            if (broken != null)
+            {
+                var where = " (code owner 0x" + (broken.CodeOwner?.OBJ?.GUID.ToString("X8") ?? "?") + ", frame "
+                    + Stack.IndexOf(broken) + " of " + Stack.Count + ")";
+                var problem = (broken.Routine == null)
+                    ? "was saved inside routine 0x" + broken.MissingRoutineID.ToString("X4") + where + ", which the installed content doesn't have"
+                    : "was saved at instruction " + broken.InstructionPointer + " of routine '" + broken.Routine.Rti?.Name?.TrimEnd('\0')
+                        + "' 0x" + broken.Routine.ID.ToString("X4") + where + ", which has only " + broken.Routine.Instructions.Length
+                        + " instructions in the installed content";
+                VMExceptionLog.WriteNote(Entity?.Object?.OBJ?.ChunkLabel ?? ("object " + Entity?.ObjectID), problem + "; it will restart its script.");
+                Stack.Clear();
+                ResetAfterLoad = true;
+            }
+
             Queue = new List<VMQueuedAction>();
             QueueDirty = true;
             foreach (var item in input.Queue) Queue.Add(new VMQueuedAction(item, context));
             ActiveQueueBlock = input.ActiveQueueBlock;
+
+            //direct control actions saved under TS1 use a runtime-only routine (VMDirectControlFrame.TS1Routine) and can't
+            //be resumed: their routine ID either resolves to nothing or to unrelated content with the same ID. Drop them;
+            //the frontend re-enables direct control if the player is still using it. If one was running, its stack is
+            //unresumable too, so restart the avatar on its first tick. (TSO's routine 9001 is real content and loads fine.)
+            var active = (ActiveQueueBlock >= 0 && ActiveQueueBlock < Queue.Count) ? Queue[ActiveQueueBlock] : null;
+            var removed = Queue.RemoveAll(action => action.Flags.HasFlag(TTABFlags.FSODirectControl)
+                && (context.VM.TS1 || action.ActionRoutine == null));
+            if (removed > 0)
+            {
+                ActiveQueueBlock = (sbyte)((active == null) ? -1 : Queue.IndexOf(active));
+                if (active != null && ActiveQueueBlock == -1)
+                {
+                    Stack.Clear();
+                    ResetAfterLoad = true;
+                }
+            }
             TempRegisters = input.TempRegisters;
             TempXL = input.TempXL;
             LastStackExitCode = input.LastStackExitCode;

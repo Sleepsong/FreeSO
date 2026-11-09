@@ -62,6 +62,12 @@ namespace FSO.SimAntics
             get { return GlobalLink != null || Driver is VMFSORDriver; }
         }
         public bool TS1;
+
+        /// <summary>
+        /// Lets avatars be walked directly (VMDirectControlFrame) in this VM. TSO enables direct control through its
+        /// "aprilfools" tuning instead; TS1 frontends opt in with this.
+        /// </summary>
+        public bool AllowDirectControl;
         public static bool GlobTS1; //I don't like this, but we don't pass VM to some things and this needs to be fast
         //we can assume one application won't be running TS1 and TSO at the same time.
         public bool Aborting = false;

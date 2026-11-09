@@ -56,6 +56,37 @@ namespace FSO.SimAntics.Engine
         private const int ACCEL = PRECISION / 20; // Rate to get up to top speed.
 
         private VMDirectControlState State;
+
+        /// <summary>
+        /// Stands in for TSO's routine 9001 under TS1, whose content has no direct control routine: a single
+        /// Look Towards in FSODirectControl mode, which pushes this frame, returning whatever it returns. It exists
+        /// only at runtime, so saved direct control actions are dropped when a lot loads (see VMThread.Load).
+        /// </summary>
+        public static readonly VMRoutine TS1Routine = CreateTS1Routine();
+
+        private static VMRoutine CreateTS1Routine()
+        {
+            var routine = new VMRoutine
+            {
+                ID = 9001,
+                Arguments = 4,
+                Locals = 0,
+                Rti = new VMFunctionRTI { Name = "Direct Control" }
+            };
+            routine.Instructions = new VMInstruction[]
+            {
+                new VMInstruction
+                {
+                    Function = routine,
+                    Index = 0,
+                    Opcode = 22, //look_towards
+                    TruePointer = 254, //return true
+                    FalsePointer = 255, //return false
+                    Operand = new FSO.SimAntics.Primitives.VMLookTowardsOperand { Mode = FSO.SimAntics.Primitives.VMLookTowardsMode.FSODirectControl }
+                }
+            };
+            return routine;
+        }
         private VMDirectControlInput UserInput;
 
         private int HasDelayedInputs;

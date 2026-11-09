@@ -48,6 +48,37 @@ namespace FSO.Common.Rendering.Framework.Model
         public InputManager InputManager;
         public bool TouchMode;
 
+        /// <summary>Gamepad state for this frame. Always present; check Pad.Connected.</summary>
+        public GamePadInput Pad = new GamePadInput();
+
+        /// <summary>
+        /// The pointing device the player used most recently. While this is GamePad and the virtual cursor is
+        /// enabled, MouseState is synthesised from the pad.
+        /// </summary>
+        public InputDevice LastInputDevice = InputDevice.Mouse;
+
+        /// <summary>
+        /// Set to true during Update by any element that handles the pad natively this frame. While it is set,
+        /// the virtual cursor stands down on the following frame so pad presses aren't also delivered as mouse clicks.
+        /// Reset at the start of every frame.
+        /// </summary>
+        public bool PadCaptured;
+
+        /// <summary>Whether PadCaptured was set during the previous frame (i.e. the virtual cursor is standing down now).</summary>
+        public bool PadWasCaptured;
+
+        /// <summary>
+        /// Set during a frame by an on-screen keyboard that is taking the pad's input: other pad navigation (screens,
+        /// dialogs) should leave it alone. Reset every frame.
+        /// </summary>
+        public bool PadTextEntry;
+
+        /// <summary>
+        /// Set by a screen that is handing the pad over to the virtual cursor (it stops capturing): where the cursor
+        /// should start, in window pixels, instead of the centre. Used once, then cleared.
+        /// </summary>
+        public Point? PadCursorStart;
+
         public KeyboardState PreviousKeyboardState;
         public List<char> FrameTextInput;
 

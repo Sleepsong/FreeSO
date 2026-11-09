@@ -72,6 +72,13 @@ namespace FSO.SimAntics.Engine
             }
         };
 
+        /// <summary>An outfit from one of the person's strings, or null if the person doesn't have it.</summary>
+        private static VMOutfitReference PersonStringOutfit(STR bodyStrings, int index)
+        {
+            var data = bodyStrings?.GetString(index);
+            return string.IsNullOrWhiteSpace(data) ? null : new VMOutfitReference(data, false);
+        }
+
         public static VMOutfitReference GetPersonSuitTS1(VMAvatar avatar, ushort id)
         {
             var type = (VMPersonSuits)id;
@@ -136,26 +143,33 @@ namespace FSO.SimAntics.Engine
                 case VMPersonSuits.SkeletonMinus:
                     toHandCopy = new VMOutfitReference((child ? "skeletonchd_01" : "skeleton_01") + ",BODY=skeleneg_01", true);
                     break;
+                //the expansion packs' outfits come from the person's own strings, which Sims made before the pack (or
+                //saved without it) don't have: they keep their everyday clothes rather than failing the interaction
                 case VMPersonSuits.TS1Toga:
                 case VMPersonSuits.TS1Country:
                 case VMPersonSuits.TS1Luau:
                 case VMPersonSuits.TS1Rave:
                 case VMPersonSuits.TS1Costume: //person strings 27. hands: 28, 29
                 case VMPersonSuits.TS1ExpandedFormal: //person strings 30 (f###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(30), false);
+                    toHandCopy = PersonStringOutfit(bodyStrings, 30);
+                    if (toHandCopy == null) return avatar.DefaultSuits.Daywear;
                     break;
                 case VMPersonSuits.TS1ExpandedSwimsuit: //person strings 31 (s###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(31), false);
+                    toHandCopy = PersonStringOutfit(bodyStrings, 31);
+                    if (toHandCopy == null) return avatar.DefaultSuits.Daywear;
                     break;
                 case VMPersonSuits.TS1ExpandedPajamas: //person strings 32 (l###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(32), false);
+                    toHandCopy = PersonStringOutfit(bodyStrings, 32);
+                    if (toHandCopy == null) return avatar.DefaultSuits.Daywear;
                     break;
                 case VMPersonSuits.TS1Disco: //???
                 case VMPersonSuits.TS1Winter: //person strings 33 (w###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(33), false);
+                    toHandCopy = PersonStringOutfit(bodyStrings, 33);
+                    if (toHandCopy == null) return avatar.DefaultSuits.Daywear;
                     break;
                 case VMPersonSuits.TS1HighFashion: //person strings 34 (h###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(34), false);
+                    toHandCopy = PersonStringOutfit(bodyStrings, 34);
+                    if (toHandCopy == null) return avatar.DefaultSuits.Daywear;
                     break;
             }
 

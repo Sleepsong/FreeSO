@@ -63,8 +63,9 @@ namespace FSO.SimAntics
 
         private VMMotiveChange[] MotiveChanges = new VMMotiveChange[16];
         private VMIMotiveDecay MotiveDecay;
-        private const int PersonDataLength = 101;
-        private short[] PersonData = new short[PersonDataLength];
+        /// <summary>Entries GetPersonData accepts (0-100). Every person data array is kept at least this long.</summary>
+        private const int PersonDataSize = 101;
+        private short[] PersonData = new short[PersonDataSize];
         private short[] MotiveData = new short[16];
         private float _RadianDirection;
 
@@ -155,6 +156,12 @@ namespace FSO.SimAntics
         }
 
         //inferred properties
+        /// <summary>
+        /// TS1: whether this avatar should keep a direct control action queued. Runtime only, unlike TSO's
+        /// person data flag, so it never ends up in TS1 save data.
+        /// </summary>
+        public bool DirectControlEnabled;
+
         public string[] WalkAnimations = new string[50];
         public string[] SwimAnimations = new string[50];
         private STR BodyStrings;
@@ -793,6 +800,15 @@ namespace FSO.SimAntics
             return PersonData[(ushort)variable];
         }
 
+        private static short[] PadPersonData(short[] data)
+        {
+            if (data == null) return new short[PersonDataSize];
+            if (data.Length >= PersonDataSize) return data;
+            var padded = new short[PersonDataSize];
+            Array.Copy(data, padded, data.Length);
+            return padded;
+        }
+
         public short[] GetPersonDataClone()
         {
             return PersonData.ToArray();
@@ -934,7 +950,12 @@ namespace FSO.SimAntics
                     }
                     break;
                 case VMPersonDataVariable.CurrentOutfit:
-                    if (Thread.Context.VM.TS1) BodyOutfit = VMSuitProvider.GetPersonSuitTS1(this, (ushort)value);
+                    if (Thread.Context.VM.TS1)
+                    {
+                        //a suit it doesn't know (or can't find for this person) keeps the current outfit
+                        var ts1Suit = VMSuitProvider.GetPersonSuitTS1(this, (ushort)value);
+                        if (ts1Suit != null) BodyOutfit = ts1Suit;
+                    }
                     else
                     {
                         var suit = VMSuitProvider.GetSuit(Thread.Stack.LastOrDefault(), Engine.Scopes.VMSuitScope.Person, (ushort)value);
@@ -960,10 +981,16 @@ namespace FSO.SimAntics
             var lastGender = GetPersonData(VMPersonDataVariable.Gender);
             var lastPersonType = GetPersonData(VMPersonDataVariable.PersonType);
             var sched = GetPersonData(VMPersonDataVariable.VisitorSchedule);
-            // neighbour records only store the first 88 entries (NBRS), so copy them over our own array
-            // rather than replacing it: entries 88+ (rehire tickers, random skin, friend counts...)
-            // would otherwise be out of range for every Sim loaded from the neighbourhood.
-            if (neigh.PersonData != null) Array.Copy(neigh.PersonData, PersonData, Math.Min(neigh.PersonData.Length, PersonData.Length));
+            if (neigh.PersonData != null)
+            {
+                //neighbourhood records hold fewer entries (88) than avatars use (101). Overlay them rather than
+                //replacing the array, so trees that read later entries (e.g. Makin' Magic's ghost social checks)
+                //see the avatar's existing values instead of indexing past the end.
+                var data = new short[Math.Max(PersonDataSize, Math.Max(PersonData.Length, neigh.PersonData.Length))];
+                Array.Copy(PersonData, data, PersonData.Length);
+                Array.Copy(neigh.PersonData, data, neigh.PersonData.Length);
+                PersonData = data;
+            }
             SetPersonData(VMPersonDataVariable.Gender, lastGender); //fixes cats switching to children suddenly
             SetPersonData(VMPersonDataVariable.NeighborId, neigh.NeighbourID);
             if (lastPersonType == 0) SetPersonData(VMPersonDataVariable.PersonType, (short)((GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == current?.ChunkID) ? 0 : 1));
@@ -1130,8 +1157,8 @@ namespace FSO.SimAntics
 
         public override VMEntity GetSlot(int slot)
         {
-            // scripts (e.g. Makin' Magic's attraction checks) ask for slots a Sim doesn't have;
-            // treat those as empty, as VMGameObject does
+            //out-of-range slots are empty, as for game objects. Some TS1 expansion trees (e.g. Makin' Magic's
+            //attraction check) read avatar slots past the three that avatars have.
             if (slot < 0 || slot >= Contained.Length) return null;
             return Contained[slot];
         }
@@ -1247,9 +1274,8 @@ namespace FSO.SimAntics
 
             MotiveChanges = input.MotiveChanges;
             MotiveDecay = input.MotiveDecay;
-            PersonData = input.PersonData;
-            // lots saved while the above bug was present store short arrays; pad them back out
-            if (PersonData.Length < PersonDataLength) Array.Resize(ref PersonData, PersonDataLength);
+            //houses saved by the original game carry 80 (pre-Superstar) or 256 entries.
+            PersonData = PadPersonData(input.PersonData);
             MotiveData = input.MotiveData;
             RadianDirection = input.RadianDirection;
             KillTimeout = input.KillTimeout;

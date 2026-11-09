@@ -35,7 +35,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Verify(VM vm, VMAvatar caller)
         {
-            return base.Verify(vm, caller) && (vm.Tuning.GetTuning("aprilfools", 0, 2023) ?? 0) != 0;
+            return base.Verify(vm, caller) && (vm.AllowDirectControl || (vm.Tuning?.GetTuning("aprilfools", 0, 2023) ?? 0) != 0);
         }
 
         #region VMSerializable Members

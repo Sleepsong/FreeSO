@@ -124,6 +124,17 @@ namespace FSO.Client
             { "ArchiveServerGUID", "" },
             { "ArchiveClientGUID", "" },
             { "TS1FreeWill", "true" },
+
+            { "GamePadEnabled", "true" },
+            { "GamePadVirtualCursor", "true" }, //left stick drives a stand-in mouse cursor on screens without native pad support
+            { "GamePadDeadZone", "0.2" },
+            { "GamePadCursorSpeed", "1" },
+            { "GamePadSwapConfirmCancel", "false" }, //confirm on B, cancel on A
+            { "GamePadGlyphs", "auto" }, //button names in prompts: auto (from the pad's name), xbox or playstation
+            { "GamePadInvertZoom", "false" }, //right stick up zooms out instead of in
+            { "GamePadDirectControl", "false" }, //live mode starts in direct control (3D camera only) instead of cursor mode
+            { "GamePadIgnoreEchoes", "true" }, //ignore keyboard/mouse while the pad is held (Steam Input's desktop layout sends both)
+            { "UILayout", "auto" }, //Simitone lot UI: desktop, mobile, or auto (mobile for touch, or when the pad was in use as the lot loaded)
         };
 
         public override Dictionary<string, string> DefaultValues
@@ -206,6 +217,17 @@ namespace FSO.Client
         public string ArchiveClientGUID { get; set; }
 
         public bool TS1FreeWill { get; set; }
+
+        public bool GamePadEnabled { get; set; }
+        public bool GamePadVirtualCursor { get; set; }
+        public float GamePadDeadZone { get; set; }
+        public float GamePadCursorSpeed { get; set; }
+        public bool GamePadSwapConfirmCancel { get; set; }
+        public string GamePadGlyphs { get; set; }
+        public bool GamePadInvertZoom { get; set; }
+        public bool GamePadDirectControl { get; set; }
+        public bool GamePadIgnoreEchoes { get; set; }
+        public string UILayout { get; set; }
 
         public static int TARGET_COMPAT_STATE = 2;
     }

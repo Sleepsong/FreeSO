@@ -152,6 +152,9 @@ namespace FSO.SimAntics.Engine
             };
         }
 
+        /// <summary>When loading couldn't find this frame's routine, the routine id it asked for; otherwise -1.</summary>
+        public int MissingRoutineID = -1;
+
         public virtual void Load(VMStackFrameMarshal input, VMContext context)
         {
             CodeOwner = FSO.Content.Content.Get().WorldObjects.Get(input.CodeOwnerGUID);
@@ -160,6 +163,7 @@ namespace FSO.SimAntics.Engine
             if (input.RoutineID >= 8192) Routine = (VMRoutine)ScopeResource.SemiGlobal.GetRoutine(input.RoutineID);
             else if (input.RoutineID >= 4096) Routine = (VMRoutine)ScopeResource.GetRoutine(input.RoutineID);
             else Routine = (VMRoutine)Global.Resource.GetRoutine(input.RoutineID);
+            MissingRoutineID = (Routine == null) ? input.RoutineID : -1;
 
             InstructionPointer = (byte)input.InstructionPointer;
             Caller = context.VM.GetObjectById(input.Caller);

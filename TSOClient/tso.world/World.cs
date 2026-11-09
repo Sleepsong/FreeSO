@@ -953,6 +953,43 @@ namespace FSO.LotView
         }
 
         /// <summary>
+        /// Projects a point in tile space to the screen. The inverse of EstTileAtPosWithScroll: the result is in the
+        /// same screen space that method accepts. Works for both the 2D and 3D cameras.
+        /// </summary>
+        /// <param name="tilePos">X/Y in tiles; Z is height in the units EstTileAtPosWithScrollHeight returns
+        /// (floor height of 2.95 per level above the ground, plus terrain altitude).</param>
+        public Vector2 ProjectToScreen(Vector3 tilePos)
+        {
+            var world = new Vector3(tilePos.X, tilePos.Z, tilePos.Y) * WorldSpace.WorldUnitsPerTile;
+            var projected = State.Device.Viewport.Project(world, State.Projection, State.View, Matrix.Identity);
+            return new Vector2(projected.X, projected.Y);
+        }
+
+        /// <summary>
+        /// Projects a point at a tile position on a level (terrain height included) to the screen.
+        /// </summary>
+        /// <param name="heightAboveFloor">Height above that level's floor, in the same units as a level's height (2.95).</param>
+        public Vector2 ProjectTileToScreen(Vector2 tile, sbyte level = -1, float heightAboveFloor = 0)
+        {
+            if (level == -1) level = State.Level;
+            float altitude = (Blueprint != null && Blueprint.TileInbounds(tile)) ? Blueprint.InterpAltitude(new Vector3(tile, 0)) : 0;
+            return ProjectToScreen(new Vector3(tile, altitude + (level - 1) * 2.95f + heightAboveFloor));
+        }
+
+        /// <summary>
+        /// <see cref="ProjectTileToScreen"/> with the depth kept: Z is the point's depth in the viewport, 0 to 1 for
+        /// points between the near and far planes. In 3D, a point behind the camera falls outside that range and its
+        /// X/Y mean nothing.
+        /// </summary>
+        public Vector3 ProjectTileToScreenWithDepth(Vector2 tile, sbyte level = -1, float heightAboveFloor = 0)
+        {
+            if (level == -1) level = State.Level;
+            float altitude = (Blueprint != null && Blueprint.TileInbounds(tile)) ? Blueprint.InterpAltitude(new Vector3(tile, 0)) : 0;
+            var world = new Vector3(tile.X, altitude + (level - 1) * 2.95f + heightAboveFloor, tile.Y) * WorldSpace.WorldUnitsPerTile;
+            return State.Device.Viewport.Project(world, State.Projection, State.View, Matrix.Identity);
+        }
+
+        /// <summary>
         /// Gets the ID of the object at a given position.
         /// </summary>
         /// <param name="x">X position of object.</param>

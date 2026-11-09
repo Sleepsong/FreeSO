@@ -11,11 +11,21 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public override bool Execute(VM vm, VMAvatar avatar)
         {
             if (avatar == null) return false;
+            SetEnabled(vm, avatar, Enable);
+            return true;
+        }
 
-            avatar.SetPersonData(SimAntics.Model.VMPersonDataVariable.UnusedAndDoNotUse2, (short)(Enable ? 32767 : 0));
+        /// <summary>
+        /// Turns direct control on or off for an avatar, queueing or cancelling its direct control action.
+        /// </summary>
+        public static void SetEnabled(VM vm, VMAvatar avatar, bool enable)
+        {
+            //TS1 keeps the flag at runtime only, so it can't leak into TS1 save data.
+            if (vm.TS1) avatar.DirectControlEnabled = enable;
+            else avatar.SetPersonData(SimAntics.Model.VMPersonDataVariable.UnusedAndDoNotUse2, (short)(enable ? 32767 : 0));
             // Set avatar variable that controls whether direct control should be enabled.
 
-            if (!Enable)
+            if (!enable)
             {
                 var dcInteraction = avatar.Thread.Queue.FirstOrDefault(action => action.Flags.HasFlag(Files.Formats.IFF.Chunks.TTABFlags.FSODirectControl));
 
@@ -30,8 +40,6 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             {
                 avatar.Thread.EnsureDirectControlAction();
             }
-
-            return true;
         }
 
         public override bool Verify(VM vm, VMAvatar caller)
@@ -40,6 +48,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             {
                 return false;
             }
+            if (vm.AllowDirectControl) return true;
 
             var enable = vm.Tuning.GetTuning("aprilfools", 0, 2023) ?? 0;
 

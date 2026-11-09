@@ -1,4 +1,5 @@
-﻿using FSO.Common.Rendering.Framework.Model;
+﻿using FSO.Common.Rendering.Framework.IO;
+using FSO.Common.Rendering.Framework.Model;
 using FSO.Common.Utils;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -25,6 +26,11 @@ namespace FSO.Common.Rendering.Framework
 		private MouseState lastMouseState;
         private Vector2? prevTouchAvg;
         private const int TOUCH_ACCEPT_TIME = 5;
+
+        public VirtualCursor VirtualCursor = new VirtualCursor();
+        private PointerDeviceTracker PointerDevice = new PointerDeviceTracker();
+        private PadEchoFilter EchoFilter = new PadEchoFilter();
+        private bool WasCapturedBeforeCursor;
 
         public GameScreen(GraphicsDevice device)
         {
@@ -56,11 +62,17 @@ namespace FSO.Common.Rendering.Framework
             State.FrameTextInput = TextCharacters;
 
             var touchMode = FSOEnvironment.SoftwareKeyboard;
+            State.Pad.Update(time, hasFocus);
+            State.PadWasCaptured = State.PadCaptured;
+            State.PadCaptured = false;
+            State.PadTextEntry = false;
 
             if (touchMode)
             {
                 if (FSOEnvironment.SoftwareDepth) State.KeyboardState = new KeyboardState();
                 TouchCollection touches = TouchPanel.GetState();
+                if (touches.Count > 0) State.LastInputDevice = InputDevice.Touch;
+                else if (State.Pad.Active) State.LastInputDevice = InputDevice.GamePad;
 
                 var missing = new HashSet<MultiMouse>(State.MouseStates);
                 //relate touches to their last virtual mouse
@@ -112,6 +124,10 @@ namespace FSO.Common.Rendering.Framework
                     State.KeyboardState = new KeyboardState();
                 }
 
+                var raw = State.MouseState;
+                EchoFilter.Apply(State, (float)time.ElapsedGameTime.TotalSeconds, hasFocus && GamePadSettings.IgnoreEchoes);
+                UpdatePointerDevice(time, hasFocus, raw, EchoFilter.Filtering);
+
                 if (State.KeyboardState.IsKeyDown(Keys.LeftAlt) && State.MouseState.LeftButton == ButtonState.Pressed)
                 {
                     //emulated middle click with alt
@@ -138,6 +154,49 @@ namespace FSO.Common.Rendering.Framework
             }
 
             TextCharacters.Clear();
+        }
+
+        /// <summary>
+        /// Picks the pointer device for this frame and, while it's the pad, replaces State.MouseState with the
+        /// virtual cursor.
+        /// </summary>
+        /// <param name="raw">The hardware mouse this frame, before the echo filter.</param>
+        /// <param name="ignoreMouse">The echo filter is dropping mouse input this frame.</param>
+        private void UpdatePointerDevice(GameTime time, bool hasFocus, MouseState raw, bool ignoreMouse)
+        {
+            var previous = State.LastInputDevice;
+            var real = State.MouseState;
+            State.LastInputDevice = PointerDevice.Update(previous, raw, hasFocus, State.Pad.Active, VirtualCursor.LastWarp, ignoreMouse);
+            if (!hasFocus) return;
+
+            var width = Device.PresentationParameters.BackBufferWidth;
+            var height = Device.PresentationParameters.BackBufferHeight;
+
+            var captured = State.PadWasCaptured;
+            if (State.LastInputDevice == InputDevice.GamePad && GamePadSettings.VirtualCursor && !captured)
+            {
+                if (previous != InputDevice.GamePad)
+                {
+                    //start from wherever the mouse was, so picking up the pad doesn't make the cursor jump.
+                    VirtualCursor.MoveTo(real.Position, width, height);
+                }
+                else if (WasCapturedBeforeCursor)
+                {
+                    //a screen just handed the pad back: start where it asked (e.g. on what it had focused), else in
+                    //the centre (e.g. a dialog opened over the lot: dialogs appear centred).
+                    VirtualCursor.MoveTo(State.PadCursorStart ?? new Point(width / 2, height / 2), width, height);
+                }
+                VirtualCursor.Apply(State, time, width, height);
+            }
+            WasCapturedBeforeCursor = captured;
+            if (!captured) State.PadCursorStart = null; //only for the hand-over
+
+            if (VirtualCursor.WheelOffset != 0)
+            {
+                var ms = State.MouseState;
+                State.MouseState = new MouseState(ms.X, ms.Y, ms.ScrollWheelValue + VirtualCursor.WheelOffset,
+                    ms.LeftButton, ms.MiddleButton, ms.RightButton, ms.XButton1, ms.XButton2, ms.HorizontalScrollWheelValue);
+            }
         }
 
         private void TouchStub(UpdateState state)

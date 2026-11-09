@@ -21,6 +21,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
             if (caller != null && caller.PersistID == ActorUID)
             {
+                //direct control belongs to whoever controls the sim. Once this sim is let go it can't be addressed
+                //(its PersistID becomes 0), so end it here rather than leave it walking on its own.
+                if (caller.DirectControlEnabled && caller != target) VMNetDirectControlToggleCommand.SetEnabled(vm, caller, false);
+
                 //relinquish previous control
                 vm.Context.ObjectQueries.RemoveAvatarPersist(caller.PersistID);
                 caller.PersistID = 0;
