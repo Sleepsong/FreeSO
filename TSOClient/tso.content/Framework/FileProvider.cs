@@ -55,7 +55,7 @@ namespace FSO.Content.Framework
                 var basePath = UseTS1 ? ContentManager.TS1BasePath : ContentManager.BasePath;
                 foreach (var file in files)
                 {
-                    if (FilePattern.IsMatch(file.Replace('\\', '/')))
+                    if (FilePattern.IsMatch(UseTS1 ? Content.TS1MatchPath(file) : file.Replace('\\', '/')))
                     {
                         matchedFiles.Add(file);
                     }

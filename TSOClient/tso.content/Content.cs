@@ -73,6 +73,34 @@ namespace FSO.Content
         public static string TS1HybridBasePath = "D:/Games/The Sims/";
         public static bool TS1SteamInstall = false;
 
+        /// <summary>
+        /// Full paths of extra folders laid out like a TS1 install (eg. Downloads/, GameData/Skins/), read in addition to it.
+        /// Their files are listed after the install's, and in this order, so a loose file replaces an earlier one with the same name.
+        /// Set before Init.
+        /// </summary>
+        public static List<string> TS1ExtraRoots = new List<string>();
+
+        /// <summary>
+        /// Extra folders of .piff patches and .otf rewrites, applied after the built in patch folder. Set before Init.
+        /// </summary>
+        public static List<string> ExtraPatchPaths = new List<string>();
+
+        /// <summary>
+        /// The path to match a TS1AllFiles entry against. Files from the install are already relative to it.
+        /// Files from an extra root are listed by full path, so this gives their path within that root instead -
+        /// otherwise a folder above the root (eg. a user directory inside "Downloads/") could match by accident.
+        /// </summary>
+        public static string TS1MatchPath(string file)
+        {
+            var path = file.Replace('\\', '/');
+            foreach (var root in TS1ExtraRoots)
+            {
+                var prefix = root.Replace('\\', '/').TrimEnd('/') + "/";
+                if (path.StartsWith(prefix)) return path.Substring(prefix.Length);
+            }
+            return path;
+        }
+
         /**
          * Content Manager
          */
@@ -265,13 +293,8 @@ namespace FSO.Content
                 }
             }
 
-            var ts1AllFiles = new List<string>();
             var oldBase = BasePath;
-            if (TS1)
-            {
-                _ScanFiles(TS1BasePath, ts1AllFiles, TS1BasePath);
-                TS1AllFiles = ts1AllFiles.ToArray();
-            }
+            if (TS1) ScanTS1Files();
 
             LoadProgress = ContentLoadingProgress.InitGlobal;
             TS1Global?.Init();
@@ -286,6 +309,7 @@ namespace FSO.Content
 
             if (!TS1) PIFFRegistry.Init(Path.Combine(FSOEnvironment.ContentDir, "Patch/"));
             else PIFFRegistry.Init(Path.Combine(FSOEnvironment.ContentDir, "TS1Patch/"));
+            foreach (var patchPath in ExtraPatchPaths) PIFFRegistry.Init(patchPath);
 
             LoadProgress = ContentLoadingProgress.InitAvatars;
             Archives = new Dictionary<string, FAR3Archive>();
@@ -322,6 +346,21 @@ namespace FSO.Content
             if (TS1) Audio.Init();
 
             InitWorld();
+        }
+
+        /// <summary>
+        /// Lists the files of the TS1 install, then of each extra root.
+        /// </summary>
+        private void ScanTS1Files()
+        {
+            var ts1AllFiles = new List<string>();
+            _ScanFiles(TS1BasePath, ts1AllFiles, TS1BasePath);
+            foreach (var root in TS1ExtraRoots)
+            {
+                //listed by full path: everything that opens these does Path.Combine(TS1BasePath, file), which keeps a full path as it is
+                if (Directory.Exists(root)) _ScanFiles(root, ts1AllFiles, "");
+            }
+            TS1AllFiles = ts1AllFiles.ToArray();
         }
 
         /// <summary>

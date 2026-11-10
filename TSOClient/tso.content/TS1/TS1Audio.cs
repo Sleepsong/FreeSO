@@ -150,7 +150,7 @@ namespace FSO.Content.TS1
             List<string> matchedFiles = new List<string>();
             foreach (var file in ContentManager.TS1AllFiles)
             {
-                if (FilePattern.IsMatch(file.Replace('\\', '/')))
+                if (FilePattern.IsMatch(Content.TS1MatchPath(file)))
                 {
                     matchedFiles.Add(file);
                 }

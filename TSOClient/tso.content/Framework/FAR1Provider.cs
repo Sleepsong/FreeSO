@@ -173,7 +173,7 @@ namespace FSO.Content.Framework
                 string[] allFiles = (TS1) ? ContentManager.TS1AllFiles : ContentManager.AllFiles;
                 foreach (var file in allFiles)
                 {
-                    if (FarFilePattern.IsMatch(file.Replace('\\', '/')))
+                    if (FarFilePattern.IsMatch(TS1 ? Content.TS1MatchPath(file) : file.Replace('\\', '/')))
                     {
                         farFiles.Add(file);
                     }

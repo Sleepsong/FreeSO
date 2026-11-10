@@ -20,7 +20,8 @@ namespace FSO.Files.Formats.IFF
             for (int i = 0; i < paths.Length; i++)
             {
                 string entry = paths[i].Replace('\\', '/');
-                bool user = entry.Contains("User/");
+                //only folders inside the patch folder count, not a "User/" somewhere above it
+                bool user = entry.Substring(Math.Min(entry.Length, basePath.Length)).Contains("User/");
                 string filename = Path.GetFileName(entry);
 
                 PIFF piff;
