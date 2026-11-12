@@ -72,7 +72,11 @@ namespace FSO.SimAntics.Model
                     var h4 = Heights[((y + 1) % Height) * Width + x];
                     
                     Centers[i] = (short)((Heights[i] + h2 + h3 + h4) / 4);
-                    Sloped[i] = (h1 != h2) || (h1 != h3) || (h1 != h4);
+                    //on the last row and column the far corners wrap around to the other side of the lot.
+                    //only compare corners on the lot, or hillside lots get sloped edges (and cars can't drive off).
+                    var nx = Math.Min(x + 1, Width - 1);
+                    var ny = Math.Min(y + 1, Height - 1);
+                    Sloped[i] = (h1 != Heights[y * Width + nx]) || (h1 != Heights[ny * Width + nx]) || (h1 != Heights[ny * Width + x]);
                     i++;
                 }
             }
