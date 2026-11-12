@@ -11,6 +11,9 @@ namespace FSO.Files.FAR1
     public class FAR1Archive
     {
         private string m_Path;
+
+        /// <summary>The path this archive was opened from.</summary>
+        public string FilePath { get { return m_Path; } }
         private BinaryReader m_Reader;
 
         private uint m_ManifestOffset;
