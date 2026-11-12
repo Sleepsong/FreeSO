@@ -111,14 +111,15 @@ namespace FSO.Content
 
             ImageLoader.PremultiplyPNG = 1;// (FSOEnvironment.DirectX)?0:1;
 
+            //TS1's object and animation providers read from TS1Global, so it is needed without a device too (headless VM)
+            IffFile.TargetTS1 = TS1;
+            if (TS1) TS1Global = new TS1Provider(this);
             if (device != null)
             {
                 RCMeshes = new RCMeshProvider(device);
                 UIGraphics = new UIGraphicsProvider(this);
-                IffFile.TargetTS1 = TS1;
                 if (TS1)
                 {
-                    TS1Global = new TS1Provider(this);
                     AvatarTextures = new TS1AvatarTextureProvider(TS1Global);
                     AvatarMeshes = new TS1BMFProvider(TS1Global);
                 }

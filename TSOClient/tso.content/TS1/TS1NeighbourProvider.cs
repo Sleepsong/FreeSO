@@ -130,10 +130,11 @@ namespace FSO.Content.TS1
             MTDesc = new IffFile(Path.Combine(UserPath, "Houses/MTDesc.iff"));
 
             var zones = lotZoning.Get<STR>(1);
-            for (int i = 0; i < zones.Length; i++)
+            for (int i = 0; zones != null && i < zones.Length; i++)
             {
                 var split = zones.GetString(i).Split(',');
-                ZoningDictionary[short.Parse(split[0])] = (short)((split[1] == " community") ? 1 : 0);
+                if (split.Length < 2 || !short.TryParse(split[0], out short lotId)) continue;
+                ZoningDictionary[lotId] = (short)((split[1] == " community") ? 1 : 0);
             }
             Neighbors = MainResource.List<NBRS>().FirstOrDefault();
             Neighborhood = MainResource.List<NGBH>().FirstOrDefault();
