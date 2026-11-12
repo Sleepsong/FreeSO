@@ -98,14 +98,18 @@ namespace FSO.SimAntics.Primitives
                     //-1 is this family's home lot
                     var switchLotId = (uint)context.Thread.TempRegisters[0];
                     var vacation = switchLotId >= 40 && switchLotId < 50;
+                    // Old Town's community lots take the household, like Vacation; Downtown stays caller-only.
+                    var oldTown = switchLotId == 58 || switchLotId == 61 || (switchLotId >= 70 && switchLotId <= 75);
                     var crossData = Content.Content.Get().Neighborhood.GameState;
                     crossData.ActiveFamily = context.VM.TS1State.CurrentFamily;
                     crossData.DowntownSimGUID = context.Caller.Object.OBJ.GUID;
-                    crossData.LotTransitInfo = (vacation) ? (short)1 : context.VM.GetGlobalValue(34);
+                    var global34 = context.VM.GetGlobalValue(34);
+                    var wholeFamily = global34 <= 0 && (vacation || oldTown);
+                    crossData.LotTransitInfo = wholeFamily ? (short)1 : global34;
                     var people = new List<VMAvatar>();
 
                     people.Add((VMAvatar)context.Caller);
-                    if (crossData.LotTransitInfo >= 1)
+                    if (crossData.LotTransitInfo == 1)
                     {
                         foreach (VMAvatar person in context.VM.Context.ObjectQueries.Avatars)
                         {
@@ -230,7 +234,7 @@ namespace FSO.SimAntics.Primitives
                 case VMGenericTS1CallMode.BuildVacationFamilyPutFamilyNumInTemp0: //26
                     //in our implementation, vacation lots build the family in the same way as normal lots.
                     var crossData2 = Content.Content.Get().Neighborhood.GameState;
-                    if (crossData2.LotTransitInfo >= 1)
+                    if (crossData2.LotTransitInfo == 1)
                     {
                         crossData2.ActiveFamily.SelectWholeFamily();
                         context.VM.TS1State.ActivateFamily(context.VM, crossData2.ActiveFamily);
@@ -255,7 +259,7 @@ namespace FSO.SimAntics.Primitives
                         context.Thread.TempRegisters[0] = context.VM.GetGlobalValue(3);
                     }
 
-                    context.Thread.TempRegisters[1] = (short)((crossData2.LotTransitInfo >= 1) ? 1 : 0);
+                    context.Thread.TempRegisters[1] = (short)((crossData2.LotTransitInfo == 1) ? 1 : 0);
                     break;
                 case VMGenericTS1CallMode.ReturnNumberOfAvaiableVacationLotsInTemp0: //27
                     //TODO: vacation lots are disabled when other people have saved the game there! that's what this primitive checks.
