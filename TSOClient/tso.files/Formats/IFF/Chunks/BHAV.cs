@@ -22,12 +22,35 @@ namespace FSO.Files.Formats.IFF.Chunks
         /// </summary>
         /// <param name="iff">Iff instance.</param>
         /// <param name="stream">A Stream instance holding a BHAV chunk.</param>
+        /// <summary>
+        /// Some files (eg. converted TSO objects) have a 0x8003 header on a body that is actually the 0x8002 layout.
+        /// True if the size only works out as 0x8002.
+        /// </summary>
+        private static bool IsOldLayoutMislabeled(byte[] data)
+        {
+            if (data.Length < 13) return false;
+            long newCount = BitConverter.ToUInt32(data, 9);
+            if (newCount * 12 + 13 == data.Length) return false;
+            long oldCount = BitConverter.ToUInt16(data, 2);
+            return oldCount * 12 + 12 == data.Length;
+        }
+
         public override void Read(IffFile iff, System.IO.Stream stream)
         {
+            byte[] oldLayoutCheck = new byte[0];
+            if (stream.CanSeek && stream.Length >= 13)
+            {
+                var start = stream.Position;
+                oldLayoutCheck = new byte[stream.Length - start];
+                stream.Read(oldLayoutCheck, 0, oldLayoutCheck.Length);
+                stream.Position = start;
+            }
             using (var io = IoBuffer.FromStream(stream, ByteOrder.LITTLE_ENDIAN))
             {
                 var filetypeVersion = io.ReadUInt16();
                 uint count = 0;
+
+                if (filetypeVersion == 0x8003 && IsOldLayoutMislabeled(oldLayoutCheck)) filetypeVersion = 0x8002;
 
                 if (filetypeVersion == 0x8000)
                 {

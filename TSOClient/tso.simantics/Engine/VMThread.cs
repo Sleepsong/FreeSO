@@ -1113,6 +1113,19 @@ namespace FSO.SimAntics.Engine
 
         public virtual void Load(VMThreadMarshal input, VMContext context)
         {
+            // a frame or queued action can belong to an object that isn't installed (missing custom content).
+            // drop the whole thread state in that case so the Sim goes idle instead of the lot failing to load.
+            var worldObjects = FSO.Content.Content.Get().WorldObjects;
+            bool missingCode = false;
+            foreach (var item in input.Stack) if (worldObjects.Get(item.CodeOwnerGUID) == null) missingCode = true;
+            foreach (var item in input.Queue) if (worldObjects.Get(item.CodeOwnerGUID) == null) missingCode = true;
+            if (missingCode)
+            {
+                input.Stack = new VMStackFrameMarshal[0];
+                input.Queue = new VMQueuedActionMarshal[0];
+                input.ActiveQueueBlock = -1;
+            }
+
             Stack = new List<VMStackFrame>();
             foreach (var item in input.Stack)
             {
