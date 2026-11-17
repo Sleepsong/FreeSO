@@ -100,6 +100,11 @@ namespace FSO.Content.Framework
         private string[] Extensions;
         private Func<object, T> Converter;
 
+        /// <summary>
+        /// Names that showed up in more than one extension pass, eg. a ".cmx.bcf" file is found by both ".bcf" and ".cmx".
+        /// </summary>
+        public List<string> DuplicateKeys { get; } = new List<string>();
+
         public TS1SubProvider(TS1Provider baseProvider, string extension, Func<object, T> converter) : this(baseProvider, extension)
         {
             Converter = converter;
@@ -131,7 +136,12 @@ namespace FSO.Content.Framework
             for (int i=1; i<Extensions.Length; i++)
             {
                 var ents = BaseProvider.BuildDictionary(Extensions[i], "globals");
-                foreach (var item in ents) Entries.Add(item.Key, item.Value);
+                foreach (var item in ents)
+                {
+                    // last one wins, same as BuildDictionary. a duplicate shouldn't take the whole game down.
+                    if (Entries.ContainsKey(item.Key)) DuplicateKeys.Add(item.Key);
+                    Entries[item.Key] = item.Value;
+                }
             }
         }
 

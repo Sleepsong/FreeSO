@@ -52,6 +52,16 @@ namespace FSO.Content.TS1
             BCFProvider.Init();
             CFPProvider.Init();
 
+            foreach (var name in BCFProvider.DuplicateKeys)
+            {
+                FailedFiles.Add(new FailedFileInfo
+                {
+                    Filename = name,
+                    ErrorMessage = "Found more than once while indexing animations",
+                    ErrorType = "DuplicateKey"
+                });
+            }
+
             //scan system for named items
 
             var allBCFs = BCFProvider.ListGeneric();
