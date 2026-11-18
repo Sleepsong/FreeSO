@@ -161,8 +161,22 @@ namespace FSO.Content.TS1
                 var cFile = Path.Combine(ContentManager.TS1BasePath, file);
                 var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
 
-                var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
-                var hit = new HITFile(PathCaseTools.Insensitive(bPath + ".hit"));
+                var hsmPath = PathCaseTools.Insensitive(bPath + ".hsm");
+                var hitPath = PathCaseTools.Insensitive(bPath + ".hit");
+                if (hsmPath == null || hitPath == null)
+                {
+                    // a .hot with no matching .hsm/.hit can't be loaded. skip it instead of crashing on startup.
+                    Content.FailedContentFiles.Add(new TS1BCFProvider.FailedFileInfo
+                    {
+                        Filename = Path.GetFileName(cFile),
+                        ErrorMessage = "Missing the matching " + (hsmPath == null ? ".hsm" : ".hit") + " file",
+                        ErrorType = "MissingSoundFile"
+                    });
+                    continue;
+                }
+
+                var hsm = new HSM(hsmPath);
+                var hit = new HITFile(hitPath);
                 var hot = new Hot(cFile, hsm);
 
                 var group = new HITResourceGroup() { hsm = hsm, hit = hit, hot = hot };
