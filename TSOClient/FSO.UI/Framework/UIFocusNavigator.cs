@@ -189,7 +189,7 @@ namespace FSO.Client.UI.Framework
             var bestScore = float.MaxValue;
             foreach (var candidate in Candidates)
             {
-                var centre = GlobalRect(candidate).Center.ToVector2();
+                var centre = NavRect(candidate).Center.ToVector2();
                 var score = centre.Y + centre.X * 0.25f;
                 if (score < bestScore)
                 {
@@ -204,7 +204,7 @@ namespace FSO.Client.UI.Framework
         {
             if (Focused is IPadNavigable navigable && navigable.PadMove(direction)) return;
 
-            var from = GlobalRect(Focused);
+            var from = NavRect(Focused);
             var next = PickNeighbour(from, Candidates, Focused, direction);
             if (next != null)
             {
@@ -221,7 +221,7 @@ namespace FSO.Client.UI.Framework
         public static UIElement PickNeighbour(Rectangle from, List<UIElement> candidates, UIElement exclude, PadDirection direction)
         {
             var rects = new List<Rectangle>(candidates.Count);
-            foreach (var candidate in candidates) rects.Add(GlobalRect(candidate));
+            foreach (var candidate in candidates) rects.Add(NavRect(candidate));
             var index = PickNeighbour(from, rects, candidates.IndexOf(exclude), direction);
             return (index < 0) ? null : candidates[index];
         }
@@ -274,6 +274,30 @@ namespace FSO.Client.UI.Framework
             else if (element is UITextEdit edit) Input?.SetFocus(edit);
         }
 
+        /// <summary>
+        /// Where an element sits for moving between elements, given its screen-space bounds: by default those bounds.
+        /// A game with a second screen maps that screen's elements into one space with the main screen's (say, below
+        /// it), so directions carry on from one screen to the other.
+        /// </summary>
+        public static Func<UIElement, Rectangle, Rectangle> ToNavSpace;
+
+        /// <summary>
+        /// Whether a focused element's outline is drawn by this screen's navigators (null: always). For one that isn't,
+        /// <see cref="DrawElsewhere"/> is called instead, for the screen it is on to draw it.
+        /// </summary>
+        public static Func<UIElement, bool> DrawsHere;
+        public static Action<UIFocusNavigator> DrawElsewhere;
+
+        /// <summary>Seconds since the focus last moved (for outlines drawn elsewhere to pop as these do).</summary>
+        public float SinceFocusMoved => FocusTime;
+
+        /// <summary>An element's bounds for moving between elements: see <see cref="ToNavSpace"/>.</summary>
+        public static Rectangle NavRect(UIElement element)
+        {
+            var rect = GlobalRect(element);
+            return (ToNavSpace != null) ? ToNavSpace(element, rect) : rect;
+        }
+
         /// <summary>An element's bounds in screen space (the space UI draws in).</summary>
         public static Rectangle GlobalRect(UIElement element)
         {
@@ -292,6 +316,11 @@ namespace FSO.Client.UI.Framework
         public void Draw(UISpriteBatch batch)
         {
             if (!ShowOutline || Focused == null || Scope == null || !Focused.WillDraw()) return;
+            if (DrawsHere != null && !DrawsHere(Focused))
+            {
+                DrawElsewhere?.Invoke(this);
+                return;
+            }
             var rect = GlobalRect(Focused);
             if (FocusRenderer != null)
             {
