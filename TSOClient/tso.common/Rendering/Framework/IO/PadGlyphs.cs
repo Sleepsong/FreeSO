@@ -6,17 +6,20 @@ namespace FSO.Common.Rendering.Framework.IO
     public enum PadGlyphSet
     {
         Xbox,
-        PlayStation
+        PlayStation,
+        Nintendo
     }
 
     /// <summary>
-    /// Names gamepad buttons for on-screen prompts, in the naming of the pad in use: Xbox (A, B, LB...) or
-    /// PlayStation (Cross, Circle, L1...). Text only; no console artwork. Prompts name the button an action is bound
-    /// to, so swapped or rebound buttons read correctly.
+    /// Names gamepad buttons for on-screen prompts, in the naming of the pad in use: Xbox (A, B, LB...), PlayStation
+    /// (Cross, Circle, L1...) or Nintendo (A, B, L, ZL, +...). Text only; no console artwork. Prompts name the button an
+    /// action is bound to, so swapped or rebound buttons read correctly.
+    /// Nintendo pads are read by the labels on their buttons (SDL's default for them): the button marked A, on the
+    /// right, is <see cref="Buttons.A"/>. Through Steam Input, its "Use Nintendo Button Layout" does the same.
     /// </summary>
     public static class PadGlyphs
     {
-        /// <summary>"auto" (from the pad's name), "xbox" or "playstation".</summary>
+        /// <summary>"auto" (from the pad's name), "xbox", "playstation" or "nintendo".</summary>
         public static string Setting = "auto";
 
         public static PadGlyphSet Resolve(string setting, string padName)
@@ -26,8 +29,20 @@ namespace FSO.Common.Rendering.Framework.IO
                 case "xbox": return PadGlyphSet.Xbox;
                 case "playstation":
                 case "ps": return PadGlyphSet.PlayStation;
+                case "nintendo":
+                case "switch": return PadGlyphSet.Nintendo;
             }
-            return LooksLikePlayStation(padName) ? PadGlyphSet.PlayStation : PadGlyphSet.Xbox;
+            if (LooksLikePlayStation(padName)) return PadGlyphSet.PlayStation;
+            return LooksLikeNintendo(padName) ? PadGlyphSet.Nintendo : PadGlyphSet.Xbox;
+        }
+
+        /// <summary>A Nintendo pad by its name: Switch Pro Controller, Joy-Con, and pads that copy them ("Pro Controller").</summary>
+        public static bool LooksLikeNintendo(string padName)
+        {
+            if (string.IsNullOrEmpty(padName)) return false;
+            var name = padName.ToLowerInvariant();
+            return name.Contains("nintendo") || name.Contains("switch") || name.Contains("joy-con") || name.Contains("joycon")
+                || name.Contains("pro controller");
         }
 
         public static bool LooksLikePlayStation(string padName)
@@ -42,6 +57,20 @@ namespace FSO.Common.Rendering.Framework.IO
 
         public static string ButtonName(Buttons button, PadGlyphSet set)
         {
+            if (set == PadGlyphSet.Nintendo)
+            {
+                switch (button)
+                {
+                    case Buttons.LeftShoulder: return "L";
+                    case Buttons.RightShoulder: return "R";
+                    case Buttons.LeftTrigger: return "ZL";
+                    case Buttons.RightTrigger: return "ZR";
+                    case Buttons.Start: return "+";
+                    case Buttons.Back: return "-";
+                    case Buttons.BigButton: return "Home";
+                }
+                //the face buttons go by their labels (A, B, X, Y), as the pad reports them; the rest as Xbox's
+            }
             var ps = set == PadGlyphSet.PlayStation;
             switch (button)
             {

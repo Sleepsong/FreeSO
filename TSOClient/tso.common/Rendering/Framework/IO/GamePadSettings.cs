@@ -23,6 +23,32 @@ namespace FSO.Common.Rendering.Framework.IO
 
         public static PadBindings Bindings = new PadBindings();
 
+        /// <summary>From <see cref="Configure"/>: Confirm on B and Cancel on A by default, and the file bindings are saved to.</summary>
+        public static bool SwapConfirmCancel;
+        public static string OverridesPath;
+
+        /// <summary>The bindings with no overrides (the Confirm/Cancel swap as set).</summary>
+        public static PadBindings Defaults() => new PadBindings(SwapConfirmCancel);
+
+        /// <summary>
+        /// Uses <paramref name="bindings"/> from now on, and saves where they differ from the defaults to the overrides
+        /// file (gamepad.ini), so they're kept. Returns an error message if it couldn't be written (they're used anyway).
+        /// </summary>
+        public static string SaveBindings(PadBindings bindings)
+        {
+            Bindings = bindings.Clone();
+            if (OverridesPath == null) return null;
+            try
+            {
+                bindings.SaveOverrides(OverridesPath, Defaults());
+                return null;
+            }
+            catch (Exception e)
+            {
+                return OverridesPath + ": " + e.Message;
+            }
+        }
+
         /// <summary>
         /// Ignore the keyboard and mouse while the pad is held (<see cref="PadEchoFilter"/>), so remappers that also
         /// send keys and mouse movement for the pad (Steam Input's desktop layout) don't act twice.
@@ -38,6 +64,8 @@ namespace FSO.Common.Rendering.Framework.IO
         {
             Enabled = enabled;
             IgnoreEchoes = ignoreEchoes;
+            SwapConfirmCancel = swapConfirmCancel;
+            OverridesPath = overridesPath;
             PadGlyphs.Setting = glyphs;
             DeadZone = Math.Clamp(deadZone, 0f, 0.9f);
             VirtualCursor = virtualCursor;
