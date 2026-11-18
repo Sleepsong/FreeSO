@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.Xna.Framework.Input;
 
 namespace FSO.Common.Rendering.Framework.IO
@@ -36,6 +37,80 @@ namespace FSO.Common.Rendering.Framework.IO
         }
 
         public Buttons[] Get(PadAction action) => Map[(int)action];
+
+        /// <summary>
+        /// The buttons that can be bound: one for each action by default. Not the Guide button, which the system keeps.
+        /// </summary>
+        public static readonly Buttons[] Bindable =
+        {
+            Buttons.A, Buttons.B, Buttons.X, Buttons.Y, Buttons.LeftShoulder, Buttons.RightShoulder,
+            Buttons.LeftTrigger, Buttons.RightTrigger, Buttons.DPadUp, Buttons.DPadDown, Buttons.DPadLeft, Buttons.DPadRight,
+            Buttons.Start, Buttons.Back, Buttons.LeftStick, Buttons.RightStick
+        };
+
+        public PadBindings Clone()
+        {
+            var copy = new PadBindings();
+            for (int i = 0; i < Map.Length; i++) copy.Map[i] = (Buttons[])Map[i].Clone();
+            return copy;
+        }
+
+        /// <summary>Whether an action has the same buttons, in the same order, as in <paramref name="other"/>.</summary>
+        public bool SameAs(PadAction action, PadBindings other)
+        {
+            return Get(action).SequenceEqual(other.Get(action));
+        }
+
+        /// <summary>The action a button is bound to (the first, if a hand-written file gave it to more than one), or null.</summary>
+        public PadAction? ActionOf(Buttons button)
+        {
+            for (int i = 0; i < Map.Length; i++)
+                if (Map[i].Contains(button)) return (PadAction)i;
+            return null;
+        }
+
+        /// <summary>
+        /// Binds <paramref name="button"/> to <paramref name="action"/>, alone. Any other action with that button gives it
+        /// up; one left with no button takes the button <paramref name="action"/> had, so the two swap and every action
+        /// keeps a button (Confirm and Cancel can't be lost).
+        /// </summary>
+        public void Rebind(PadAction action, Buttons button)
+        {
+            var old = Get(action);
+            Buttons? given = (old.Length > 0 && old[0] != button) ? old[0] : (Buttons?)null;
+            for (int i = 0; i < Map.Length; i++)
+            {
+                if (i == (int)action || !Map[i].Contains(button)) continue;
+                var rest = Map[i].Where(x => x != button).ToArray();
+                if (rest.Length == 0 && given != null) rest = new[] { given.Value };
+                Map[i] = rest;
+            }
+            Set(action, button);
+        }
+
+        /// <summary>
+        /// Writes the bindings that differ from <paramref name="defaults"/> to <paramref name="path"/>, in the form
+        /// <see cref="LoadOverrides"/> reads (the whole file is replaced).
+        /// </summary>
+        public void SaveOverrides(string path, PadBindings defaults)
+        {
+            var lines = new List<string>
+            {
+                "# Gamepad button bindings, on top of the defaults. Written by Options > Controller > Button Mapping;",
+                "# it can be edited by hand too: one action per line, its buttons after '='.",
+                "# Actions: " + string.Join(" ", System.Enum.GetNames(typeof(PadAction))),
+                "# Buttons: " + string.Join(" ", Bindable.Select(x => x.ToString())),
+            };
+            for (int i = 0; i < Map.Length; i++)
+            {
+                var action = (PadAction)i;
+                if (SameAs(action, defaults)) continue;
+                lines.Add(action + " = " + string.Join(", ", Get(action).Select(x => x.ToString())));
+            }
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllLines(path, lines);
+        }
 
         public void Set(PadAction action, params Buttons[] buttons)
         {

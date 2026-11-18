@@ -100,6 +100,21 @@ namespace FSO.Common.Rendering.Framework.IO
         private readonly double[] NextRepeat = new double[SlotCount];
         private readonly GamePadState[] PadStates = new GamePadState[MaxPads];
 
+        /// <summary>
+        /// While set, no action is down: the pad's buttons are being read as they are, to bind one (see
+        /// <see cref="JustPressed"/>). Clear it once they're let go (<see cref="AnyBindableDown"/>), or the button still
+        /// held acts as soon as it's cleared.
+        /// </summary>
+        public bool Capture;
+
+        /// <summary>A bindable button (<see cref="PadBindings.Bindable"/>) first pressed this frame, whatever it's bound to.</summary>
+        public Buttons? JustPressed { get; private set; }
+
+        /// <summary>Any bindable button down, triggers included.</summary>
+        public bool AnyBindableDown { get; private set; }
+
+        private GamePadState LastRaw;
+
         public bool IsDown(PadAction action) => Down[(int)action];
         public bool Pressed(PadAction action) => Down[(int)action] && !WasDown[(int)action];
         public bool Released(PadAction action) => !Down[(int)action] && WasDown[(int)action];
@@ -150,8 +165,11 @@ namespace FSO.Common.Rendering.Framework.IO
             Connected = state.IsConnected;
             UsedWhileUnfocused = Connected && !focused && GamePadSettings.Enabled && InUse(state);
 
+            JustPressed = null;
+            AnyBindableDown = false;
             if (!Connected || !focused || !GamePadSettings.Enabled)
             {
+                LastRaw = default(GamePadState);
                 State = default(GamePadState);
                 LeftStick = RightStick = Vector2.Zero;
                 LeftTrigger = RightTrigger = 0;
@@ -209,6 +227,22 @@ namespace FSO.Common.Rendering.Framework.IO
             }
 
             AnyButtonDown = IsAnyButtonDown(ref state);
+
+            //the buttons as they are: for binding one
+            foreach (var button in PadBindings.Bindable)
+            {
+                if (!IsButtonDown(ref state, button)) continue;
+                AnyBindableDown = true;
+                if (JustPressed == null && !IsButtonDown(ref LastRaw, button)) JustPressed = button;
+            }
+            LastRaw = state;
+            if (Capture)
+            {
+                Array.Clear(Down, 0, SlotCount);
+                Array.Clear(Repeat, 0, SlotCount);
+                Active = JustPressed != null; //(still the pad in use)
+                return;
+            }
 
             if ((lastLeft == Vector2.Zero && LeftStick != Vector2.Zero)
                 || (lastRight == Vector2.Zero && RightStick != Vector2.Zero)

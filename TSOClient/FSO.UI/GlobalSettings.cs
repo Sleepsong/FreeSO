@@ -128,7 +128,7 @@ namespace FSO.Client
             { "GamePadDeadZone", "0.2" },
             { "GamePadCursorSpeed", "1" },
             { "GamePadSwapConfirmCancel", "false" }, //confirm on B, cancel on A
-            { "GamePadGlyphs", "auto" }, //button names in prompts: auto (from the pad's name), xbox or playstation
+            { "GamePadGlyphs", "auto" }, //button names in prompts: auto (from the pad's name), xbox, playstation or nintendo
             { "GamePadInvertZoom", "false" }, //right stick up/down inverted: up zooms out instead of in (and looks down, in first person)
             { "GamePadInvertTurn", "false" }, //right stick left/right inverted: the camera turns the other way (and looks the other way, in first person)
             { "GamePadDirectControl", "false" }, //live mode starts in direct control (3D camera only) instead of cursor mode
