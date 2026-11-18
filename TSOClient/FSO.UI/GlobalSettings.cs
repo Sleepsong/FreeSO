@@ -156,7 +156,7 @@ namespace FSO.Client
         public bool FastDepth2D { get; set; }
         /// <summary>Devices with a second screen (the AYN Thor's bottom screen): the lot's controls go there.</summary>
         public bool DualScreen { get; set; }
-        /// <summary>Swap the screens: the game on the other display (the Thor's bottom screen, or a TV or monitor), the controls on this one. Applies at the next start.</summary>
+        /// <summary>Swap the screens: the game on the other display (the Thor's bottom screen, or a TV or monitor), the controls on this one. Applied at once.</summary>
         public bool DualScreenSwap { get; set; }
         public bool Lighting { get; set; }
         public byte FXVolume { get; set; }
