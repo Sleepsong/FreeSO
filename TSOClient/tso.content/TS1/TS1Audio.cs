@@ -262,6 +262,9 @@ namespace FSO.Content.TS1
             }
         }
 
+        /// <summary>A sound's file as decoded (a WAV file's bytes), or null: for a copy of it to be made (a mono one, to place in 3D).</summary>
+        public byte[] GetSFXData(Patch patch) => GetAudioFrom(patch?.Filename)?.Data;
+
         private DecodedSFX GetAudioFrom(string fileName)
         {
             if (fileName == null) return null;

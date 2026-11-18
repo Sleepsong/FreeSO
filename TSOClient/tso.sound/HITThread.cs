@@ -68,6 +68,20 @@ namespace FSO.HIT
 
         private IAudioProvider audContent;
 
+        /// <summary>
+        /// Set by a game that places sounds in 3D (Simitone's VR): for a sound that belongs to a Sim or an object, a copy
+        /// to play instead that can be placed (OpenAL only places mono sounds, so a stereo one is mixed down to mono), or
+        /// null to play it as it is. Null (the default): sounds play as they are.
+        /// </summary>
+        public static Func<Patch, SoundEffect, SoundEffect> PlacedVariant;
+
+        private SoundEffect Placeable(SoundEffect sound)
+        {
+            var variant = PlacedVariant;
+            if (sound == null || variant == null || Owners.Count == 0) return sound;
+            return variant(Patch, sound) ?? sound;
+        }
+
         public void Interrupt(HITThread waiter)
         {
             Interrupted = true;
@@ -304,7 +318,7 @@ namespace FSO.HIT
         /// <returns>-1 if unsuccessful, or the id of the note played.</returns>
         public int NoteOn()
         {
-            var sound = audContent.GetSFX(Patch);
+            var sound = Placeable(audContent.GetSFX(Patch));
 
             if (sound != null)
             {
@@ -345,7 +359,7 @@ namespace FSO.HIT
         /// <returns>-1 if unsuccessful, or the id of the note played.</returns>
         public int NoteLoop() //todo, make loop again.
         {
-            var sound = audContent.GetSFX(Patch);
+            var sound = Placeable(audContent.GetSFX(Patch));
 
             if (sound != null)
             {
