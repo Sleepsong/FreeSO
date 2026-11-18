@@ -128,7 +128,8 @@ namespace FSO.Client
             { "GamePadCursorSpeed", "1" },
             { "GamePadSwapConfirmCancel", "false" }, //confirm on B, cancel on A
             { "GamePadGlyphs", "auto" }, //button names in prompts: auto (from the pad's name), xbox or playstation
-            { "GamePadInvertZoom", "false" }, //right stick up zooms out instead of in
+            { "GamePadInvertZoom", "false" }, //right stick up/down inverted: up zooms out instead of in (and looks down, in first person)
+            { "GamePadInvertTurn", "false" }, //right stick left/right inverted: the camera turns the other way (and looks the other way, in first person)
             { "GamePadDirectControl", "false" }, //live mode starts in direct control (3D camera only) instead of cursor mode
             { "GamePadIgnoreEchoes", "true" }, //ignore keyboard/mouse while the pad is held (Steam Input's desktop layout sends both)
             { "UILayout", "auto" }, //Simitone lot UI: desktop, mobile, or auto (mobile for touch, or when the pad was in use as the lot loaded)
@@ -217,6 +218,7 @@ namespace FSO.Client
         public bool GamePadSwapConfirmCancel { get; set; }
         public string GamePadGlyphs { get; set; }
         public bool GamePadInvertZoom { get; set; }
+        public bool GamePadInvertTurn { get; set; }
         public bool GamePadDirectControl { get; set; }
         public bool GamePadIgnoreEchoes { get; set; }
         public string UILayout { get; set; }
